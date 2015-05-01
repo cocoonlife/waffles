@@ -14,6 +14,7 @@
 
 @SET_MAKE@
 
+
 VPATH = @srcdir@
 am__is_gnu_make = test -n '$(MAKEFILE_LIST)' && test -n '$(MAKELEVEL)'
 am__make_running_with_option = \
@@ -78,7 +79,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 subdir = GClasses
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
-	$(top_srcdir)/depcomp
+	$(top_srcdir)/depcomp $(pkginclude_HEADERS)
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -114,7 +115,7 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(libdir)"
+am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgincludedir)"
 LIBRARIES = $(lib_LIBRARIES)
 AR = ar
 ARFLAGS = cru
@@ -194,6 +195,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+HEADERS = $(pkginclude_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -396,6 +398,97 @@ libGClasses_a_SOURCES = \
 	sha2.cpp\
 	usage.cpp
 
+pkginclude_HEADERS = \
+	G3D.h \
+	GActivation.h \
+	GApp.h \
+	GAssignment.h \
+	GBayesianNetwork.h \
+	GBezier.h \
+	GBigInt.h \
+	GBits.h \
+	GBitTable.h \
+	GBlob.h \
+	GCluster.h \
+	GCrypto.h \
+	GDecisionTree.h \
+	GDiff.h \
+	GDirList.h \
+	GDistance.h \
+	GDistribution.h \
+	GDom.h \
+	GDynamicPage.h \
+	GEnsemble.h \
+	GError.h \
+	GEvolutionary.h \
+	GFile.h \
+	GFourier.h \
+	GFunction.h \
+	GGaussianProcess.h \
+	GGraph.h \
+	GGridSearch.h \
+	GHashTable.h \
+	GHeap.h \
+	GHiddenMarkovModel.h \
+	GHillClimber.h \
+	GHistogram.h \
+	GHolders.h \
+	GHtml.h \
+	GHttp.h \
+	GImage.h \
+	GKalman.h \
+	GKernelTrick.h \
+	GKeyPair.h \
+	GKNN.h \
+	GLayer.h \
+	GLearner.h \
+	GLearnerLib.h \
+	GLinear.h \
+	GManifold.h \
+	GMath.h \
+	GMatrix.h \
+	GMixtureOfGaussians.h \
+	GNaiveBayes.h \
+	GNaiveInstance.h \
+	GNeighborFinder.h \
+	GNeuralNet.h \
+	GOptimizer.h \
+	GParticleSwarm.h \
+	GPlot.h \
+	GPolicyLearner.h \
+	GPolynomial.h \
+	GPriorityQueue.h \
+	GRand.h \
+	GRayTrace.h \
+	GRecommender.h \
+	GRecommenderLib.h \
+	GRect.h \
+	GRegion.h \
+	GReinforcement.h \
+	GReverseBits.h \
+	GSDL.h \
+	GSelfOrganizingMap.h \
+	GSmtp.h \
+	GSocket.h \
+	GSparseMatrix.h \
+	GStemmer.h \
+	GString.h \
+	GSystemLearner.h \
+	GText.h \
+	GThread.h \
+	GTime.h \
+	GTokenizer.h \
+	GTransform.h \
+	GTree.h \
+	GVec.h \
+	GWave.h \
+	GWidgets.h \
+	GWindows.h \
+	sha1.h \
+	sha2.h \
+	uitypes.h \
+	usage.h
+
 all: all-am
 
 .SUFFIXES:
@@ -409,9 +502,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign GClasses/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu GClasses/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign GClasses/Makefile
+	  $(AUTOMAKE) --gnu GClasses/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -575,6 +668,27 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+install-pkgincludeHEADERS: $(pkginclude_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgincludedir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkgincludedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkgincludedir)" || exit $$?; \
+	done
+
+uninstall-pkgincludeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkgincludedir)'; $(am__uninstall_files_from_dir)
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -660,9 +774,9 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LIBRARIES)
+all-am: Makefile $(LIBRARIES) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(libdir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgincludedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -717,7 +831,7 @@ info: info-am
 
 info-am:
 
-install-data-am:
+install-data-am: install-pkgincludeHEADERS
 
 install-dvi: install-dvi-am
 
@@ -762,7 +876,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-libLIBRARIES
+uninstall-am: uninstall-libLIBRARIES uninstall-pkgincludeHEADERS
 
 .MAKE: install-am install-strip
 
@@ -773,11 +887,13 @@ uninstall-am: uninstall-libLIBRARIES
 	install-data install-data-am install-dvi install-dvi-am \
 	install-exec install-exec-am install-html install-html-am \
 	install-info install-info-am install-libLIBRARIES install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am uninstall-libLIBRARIES
+	install-pdf install-pdf-am install-pkgincludeHEADERS \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic pdf pdf-am ps ps-am tags tags-am uninstall \
+	uninstall-am uninstall-libLIBRARIES \
+	uninstall-pkgincludeHEADERS
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

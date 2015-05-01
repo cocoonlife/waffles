@@ -21,6 +21,7 @@ AC_CONFIG_FILES([Makefile
 	sparse/Makefile
 	transform/Makefile
 	test/Makefile
+	waffles.pc
 	])
 
 AC_OUTPUT

@@ -3993,7 +3993,7 @@ WAFFLES_LDADD="-L../GClasses -lGClasses -lpthread"
 
 ac_config_headers="$ac_config_headers config.h"
 
-ac_config_files="$ac_config_files Makefile GClasses/Makefile wizard/Makefile audio/Makefile cluster/Makefile dimred/Makefile learn/Makefile plot/Makefile recommend/Makefile sparse/Makefile transform/Makefile test/Makefile"
+ac_config_files="$ac_config_files Makefile GClasses/Makefile wizard/Makefile audio/Makefile cluster/Makefile dimred/Makefile learn/Makefile plot/Makefile recommend/Makefile sparse/Makefile transform/Makefile test/Makefile waffles.pc"
 
 
 cat >confcache <<\_ACEOF
@@ -4743,6 +4743,7 @@ do
     "sparse/Makefile") CONFIG_FILES="$CONFIG_FILES sparse/Makefile" ;;
     "transform/Makefile") CONFIG_FILES="$CONFIG_FILES transform/Makefile" ;;
     "test/Makefile") CONFIG_FILES="$CONFIG_FILES test/Makefile" ;;
+    "waffles.pc") CONFIG_FILES="$CONFIG_FILES waffles.pc" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
