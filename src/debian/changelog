@@ -1,3 +1,9 @@
+waffles (0.0-2) trusty; urgency=medium
+
+  * Fix include location
+
+ -- Paul Brook <paul.brook@cocoon.life>  Fri, 01 May 2015 10:29:27 +0000
+
 waffles (0.0-1) unstable; urgency=low
 
   * Initial build

@@ -79,7 +79,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 subdir = GClasses
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
-	$(top_srcdir)/depcomp $(pkginclude_HEADERS)
+	$(top_srcdir)/depcomp $(gclassinclude_HEADERS)
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -115,7 +115,8 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgincludedir)"
+am__installdirs = "$(DESTDIR)$(libdir)" \
+	"$(DESTDIR)$(gclassincludedir)"
 LIBRARIES = $(lib_LIBRARIES)
 AR = ar
 ARFLAGS = cru
@@ -195,7 +196,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(pkginclude_HEADERS)
+HEADERS = $(gclassinclude_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -398,7 +399,8 @@ libGClasses_a_SOURCES = \
 	sha2.cpp\
 	usage.cpp
 
-pkginclude_HEADERS = \
+gclassincludedir = $(includedir)/GClasses
+gclassinclude_HEADERS = \
 	G3D.h \
 	GActivation.h \
 	GApp.h \
@@ -668,27 +670,27 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
-install-pkgincludeHEADERS: $(pkginclude_HEADERS)
+install-gclassincludeHEADERS: $(gclassinclude_HEADERS)
 	@$(NORMAL_INSTALL)
-	@list='$(pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
+	@list='$(gclassinclude_HEADERS)'; test -n "$(gclassincludedir)" || list=; \
 	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgincludedir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)" || exit 1; \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(gclassincludedir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(gclassincludedir)" || exit 1; \
 	fi; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
 	done | $(am__base_list) | \
 	while read files; do \
-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkgincludedir)'"; \
-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkgincludedir)" || exit $$?; \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(gclassincludedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(gclassincludedir)" || exit $$?; \
 	done
 
-uninstall-pkgincludeHEADERS:
+uninstall-gclassincludeHEADERS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
+	@list='$(gclassinclude_HEADERS)'; test -n "$(gclassincludedir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(pkgincludedir)'; $(am__uninstall_files_from_dir)
+	dir='$(DESTDIR)$(gclassincludedir)'; $(am__uninstall_files_from_dir)
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -776,7 +778,7 @@ check-am: all-am
 check: check-am
 all-am: Makefile $(LIBRARIES) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgincludedir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(gclassincludedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -831,7 +833,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-pkgincludeHEADERS
+install-data-am: install-gclassincludeHEADERS
 
 install-dvi: install-dvi-am
 
@@ -876,7 +878,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-libLIBRARIES uninstall-pkgincludeHEADERS
+uninstall-am: uninstall-gclassincludeHEADERS uninstall-libLIBRARIES
 
 .MAKE: install-am install-strip
 
@@ -885,15 +887,15 @@ uninstall-am: uninstall-libLIBRARIES uninstall-pkgincludeHEADERS
 	distclean-compile distclean-generic distclean-tags distdir dvi \
 	dvi-am html html-am info info-am install install-am \
 	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-libLIBRARIES install-man \
-	install-pdf install-pdf-am install-pkgincludeHEADERS \
+	install-exec install-exec-am install-gclassincludeHEADERS \
+	install-html install-html-am install-info install-info-am \
+	install-libLIBRARIES install-man install-pdf install-pdf-am \
 	install-ps install-ps-am install-strip installcheck \
 	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-libLIBRARIES \
-	uninstall-pkgincludeHEADERS
+	uninstall-am uninstall-gclassincludeHEADERS \
+	uninstall-libLIBRARIES
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

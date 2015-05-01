@@ -90,7 +90,8 @@ libGClasses_a_SOURCES = \
 	sha2.cpp\
 	usage.cpp
 
-pkginclude_HEADERS = \
+gclassincludedir = $(includedir)/GClasses
+gclassinclude_HEADERS = \
 	G3D.h \
 	GActivation.h \
 	GApp.h \
