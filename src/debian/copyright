@@ -1,0 +1,8 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: waffles
+Source: <http://waffles.sourceforge.net>
+
+Files: *
+Copyright: Michael S. Gashler, Eric Moyer, Michael R. Smith
+License: Public Domain
+ http://creativecommons.org/publicdomain/zero/1.0/

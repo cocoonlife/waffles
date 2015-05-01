@@ -1,0 +1,23 @@
+Source: waffles
+Priority: optional
+Maintainer: Ubuntu <ubuntu@unknown>
+Build-Depends: debhelper (>= 8.0.0), cmake
+Standards-Version: 3.9.4
+Section: libs
+Homepage: http://waffles.sourceforge.net/index.html
+#Vcs-Git: git://git.debian.org/collab-maint/waffles.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/waffles.git;a=summary
+
+Package: waffles-dev
+Section: libdevel
+Architecture: any
+#Depends: waffles1 (= ${binary:Version})
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
+Package: waffles-tools
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>

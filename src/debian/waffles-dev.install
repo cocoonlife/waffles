@@ -1,0 +1,3 @@
+usr/include/*
+usr/lib/*/libGClasses.a
+usr/lib/*/pkgconfig/*
