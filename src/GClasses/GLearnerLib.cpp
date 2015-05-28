@@ -1106,6 +1106,7 @@ void GLearnerLib::Train(GArgReader& args)
 	{
 		GCalibrator* pCal = new GCalibrator(pModel);
 		pModel = pCal;
+		hModel.release();
 		hModel.reset(pCal);
 	}
 

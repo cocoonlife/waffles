@@ -1611,12 +1611,12 @@ void GAutoFilter::test()
 // ---------------------------------------------------------------
 
 GCalibrator::GCalibrator(GSupervisedLearner* pLearner)
-: GFilter(pLearner)
+: GFilter(pLearner), m_pCalibrations(NULL)
 {
 }
 
 GCalibrator::GCalibrator(GDomNode* pNode, GLearnerLoader& ll)
-: GFilter(pNode, ll)
+: GFilter(pNode, ll), m_pCalibrations(NULL)
 {
 }
 
