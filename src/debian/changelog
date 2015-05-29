@@ -1,3 +1,9 @@
+waffles (0.0-3) trusty; urgency=medium
+
+  * Fix calibration segfault.
+
+ -- Paul Brook <paul.brook@cocoon.life>  Fri, 29 May 2015 09:30:57 +0000
+
 waffles (0.0-2) trusty; urgency=medium
 
   * Fix include location
