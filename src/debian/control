@@ -1,7 +1,7 @@
 Source: waffles
 Priority: optional
 Maintainer: Ubuntu <ubuntu@unknown>
-Build-Depends: debhelper (>= 8.0.0), cmake
+Build-Depends: debhelper (>= 8.0.0)
 Standards-Version: 3.9.4
 Section: libs
 Homepage: http://waffles.sourceforge.net/index.html

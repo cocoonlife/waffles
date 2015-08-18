@@ -1,3 +1,9 @@
+waffles (0.0-4) trusty; urgency=medium
+
+  * Move include files into subdirectory
+
+ -- Paul Brook <paul.brook@cocoon.life>  Tue, 18 Aug 2015 10:32:39 +0000
+
 waffles (0.0-3) trusty; urgency=medium
 
   * Fix calibration segfault.
