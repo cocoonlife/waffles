@@ -6,5 +6,5 @@ includedir=@includedir@
 Name: waffles
 Description: Waffles GClasses
 Version: @PACKAGE_VERSION@
-Libs: -L${libdir} -lGClasses
+Libs: -L${libdir} -lGClasses -lpthread
 Cflags: -I${includedir}
