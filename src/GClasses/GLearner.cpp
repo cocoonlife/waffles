@@ -1713,7 +1713,7 @@ GCalibrator::GCalibrator(GSupervisedLearner* pLearner)
 {
 }
 
-GCalibrator::GCalibrator(GDomNode* pNode, GLearnerLoader& ll)
+GCalibrator::GCalibrator(const GDomNode* pNode, GLearnerLoader& ll)
 : GFilter(pNode, ll), m_pCalibrations(NULL)
 {
 }
