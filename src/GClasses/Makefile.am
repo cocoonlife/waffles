@@ -5,6 +5,7 @@ libGClasses_a_SOURCES = \
 	GActivation.cpp\
 	GApp.cpp\
 	GAssignment.cpp\
+	GAssociative.cpp\
 	GBayesianNetwork.cpp\
 	GBezier.cpp\
 	GBigInt.cpp\
@@ -54,6 +55,7 @@ libGClasses_a_SOURCES = \
 	GNaiveInstance.cpp\
 	GNeighborFinder.cpp\
 	GNeuralNet.cpp\
+	GNeuralDecomposition.cpp\
 	GOptimizer.cpp\
 	GParticleSwarm.cpp\
 	GPlot.cpp\
@@ -75,7 +77,6 @@ libGClasses_a_SOURCES = \
 	GSparseMatrix.cpp\
 	GStemmer.cpp\
 	GString.cpp\
-	GSystemLearner.cpp\
 	GText.cpp\
 	GThread.cpp\
 	GTime.cpp\
@@ -96,6 +97,7 @@ gclassinclude_HEADERS = \
 	GActivation.h \
 	GApp.h \
 	GAssignment.h \
+	GAssociative.h \
 	GBayesianNetwork.h \
 	GBezier.h \
 	GBigInt.h \
@@ -145,6 +147,7 @@ gclassinclude_HEADERS = \
 	GNaiveInstance.h \
 	GNeighborFinder.h \
 	GNeuralNet.h \
+	GNeuralDecomposition.h\
 	GOptimizer.h \
 	GParticleSwarm.h \
 	GPlot.h \
@@ -166,7 +169,6 @@ gclassinclude_HEADERS = \
 	GSparseMatrix.h \
 	GStemmer.h \
 	GString.h \
-	GSystemLearner.h \
 	GText.h \
 	GThread.h \
 	GTime.h \
