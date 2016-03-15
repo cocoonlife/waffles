@@ -39,6 +39,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <memory>
 
 using namespace GClasses;
 using std::vector;
@@ -50,9 +51,9 @@ using std::ostream;
 using std::ostringstream;
 
 
-GDynamicPageSession::GDynamicPageSession(GDynamicPageServer* pServer, unsigned long long id)
+GDynamicPageSession::GDynamicPageSession(GDynamicPageServer* pServer, unsigned long long ident)
 {
-	m_id = id;
+	m_id = ident;
 	m_pServer = pServer;
 	onAccess();
 	m_pExtension = NULL;
@@ -171,7 +172,7 @@ void GDynamicPageConnection::sendFile(const char* szMimeType, const char* szFile
 	// Load the file
 	size_t nSize;
 	char* pFile = GFile::loadFile(szFilename, &nSize);
-	ArrayHolder<char> hFile(pFile);
+	std::unique_ptr<char[]> hFile(pFile);
 
 	// Set the headers
 	setContentType(szMimeType);

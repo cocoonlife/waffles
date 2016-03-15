@@ -19,6 +19,7 @@
 */
 
 #include "GRecommenderLib.h"
+#include <memory>
 
 using namespace GClasses;
 using std::cout;
@@ -131,10 +132,10 @@ void GRecommenderLib::loadData(GMatrix& data, const char* szFilename)
 			GSparseMatrix::Iter rowEnd = sm.rowEnd(i);
 			for(GSparseMatrix::Iter it = sm.rowBegin(i); it != rowEnd; it++)
 			{
-				double* pVec = data.newRow();
-				pVec[0] = (double)i;
-				pVec[1] = (double)it->first;
-				pVec[2] = it->second;
+				GVec& vec = data.newRow();
+				vec[0] = (double)i;
+				vec[1] = (double)it->first;
+				vec[2] = it->second;
 			}
 		}
 	}
@@ -165,11 +166,11 @@ GSparseMatrix* GRecommenderLib::loadSparseData(const char* szFilename)
 		if(m1 < 0 || m1 > 1e10 || r1 < 2 || r1 > 1e10)
 			throw Ex("Invalid col indexes");
 		GSparseMatrix* pMatrix = new GSparseMatrix(size_t(m0 + r0) + 1, size_t(m1 + r1) + 1, UNKNOWN_REAL_VALUE);
-		Holder<GSparseMatrix> hMatrix(pMatrix);
+		std::unique_ptr<GSparseMatrix> hMatrix(pMatrix);
 		for(size_t i = 0; i < data.rows(); i++)
 		{
-			double* pRow = data.row(i);
-			pMatrix->set(size_t(pRow[0]), size_t(pRow[1]), pRow[2]);
+			GVec& row = data.row(i);
+			pMatrix->set(size_t(row[0]), size_t(row[1]), row[2]);
 		}
 		return hMatrix.release();
 	}
@@ -326,8 +327,6 @@ GMatrixFactorization* GRecommenderLib::InstantiateMatrixFactorization(GArgReader
 			pModel->setMinIters(args.pop_uint());
 		else if(args.if_pop("-decayrate"))
 			pModel->setDecayRate(args.pop_double());
-		else if(args.if_pop("-noinputbias"))
-			pModel->noInputBias();
 		else if(args.if_pop("-nonneg"))
 			pModel->nonNegative();
 		else if(args.if_pop("-clampusers"))
@@ -349,7 +348,7 @@ GMatrixFactorization* GRecommenderLib::InstantiateMatrixFactorization(GArgReader
 	}
 	return pModel;
 }
-
+/*
 GNonlinearPCA* GRecommenderLib::InstantiateNonlinearPCA(GArgReader& args)
 {
 	if(args.size() < 1)
@@ -401,7 +400,8 @@ GNonlinearPCA* GRecommenderLib::InstantiateNonlinearPCA(GArgReader& args)
 	pModel->model()->addLayer(new GLayerClassic(FLEXIBLE_SIZE, FLEXIBLE_SIZE, pAF));
 	return pModel;
 }
-
+*/
+/*
 GHybridNonlinearPCA* GRecommenderLib::InstantiateHybridNonlinearPCA(GArgReader& args)
 {
 	if(args.size() < 2)
@@ -437,41 +437,13 @@ GHybridNonlinearPCA* GRecommenderLib::InstantiateHybridNonlinearPCA(GArgReader& 
 			pModel->setRegularizer(args.pop_double());
 		else if(args.if_pop("-dontsquashoutputs"))
 			pAF = new GActivationIdentity();
-/*		else if(args.if_pop("-activation"))
-		{
-			const char* szSF = args.pop_string();
-			GActivationFunction* pSF = NULL;
-			if(strcmp(szSF, "logistic") == 0)
-				pSF = new GActivationLogistic();
-			else if(strcmp(szSF, "arctan") == 0)
-				pSF = new GActivationArcTan();
-			else if(strcmp(szSF, "tanh") == 0)
-				pSF = new GActivationTanH();
-			else if(strcmp(szSF, "algebraic") == 0)
-				pSF = new GActivationAlgebraic();
-			else if(strcmp(szSF, "identity") == 0)
-				pSF = new GActivationIdentity();
-			else if(strcmp(szSF, "bend") == 0)
-				pSF = new GActivationBend();
-			else if(strcmp(szSF, "bidir") == 0)
-				pSF = new GActivationBiDir();
-			else if(strcmp(szSF, "piecewise") == 0)
-				pSF = new GActivationPiecewise();
-			else if(strcmp(szSF, "gaussian") == 0)
-				pSF = new GActivationGaussian();
-			else if(strcmp(szSF, "sinc") == 0)
-				pSF = new GActivationSinc();
-			else
-				throw Ex("Unrecognized activation function: ", szSF);
-			pModel->model()->setActivationFunction(pSF, true);
-		}*/
 		else
 			throw Ex("Invalid option: ", args.peek());
 	}
 	pModel->model()->addLayer(new GLayerClassic(FLEXIBLE_SIZE, FLEXIBLE_SIZE, pAF));
 	return pModel;
 }
-
+*/
 GContentBasedFilter* GRecommenderLib::InstantiateContentBasedFilter(GArgReader& args)
 {
 	if(args.size() < 2)
@@ -504,7 +476,7 @@ void GRecommenderLib::showInstantiateAlgorithmError(const char* szMessage, GArgR
 	cerr << szMessage << "\n\n";
 	const char* szAlgName = args.peek();
 	UsageNode* pAlgTree = makeCollaborativeFilterUsageTree();
-	Holder<UsageNode> hAlgTree(pAlgTree);
+	std::unique_ptr<UsageNode> hAlgTree(pAlgTree);
 	if(szAlgName)
 	{
 		UsageNode* pUsageAlg = pAlgTree->choice(szAlgName);
@@ -550,10 +522,10 @@ GCollaborativeFilter* GRecommenderLib::InstantiateAlgorithm(GArgReader& args)
 			return InstantiateLogNet(args);
 		else if(args.if_pop("matrix"))
 			return InstantiateMatrixFactorization(args);
-		else if(args.if_pop("nlpca"))
-			return InstantiateNonlinearPCA(args);
-		else if(args.if_pop("hybridnlpca"))
-			return InstantiateHybridNonlinearPCA(args);
+//		else if(args.if_pop("nlpca"))
+//			return InstantiateNonlinearPCA(args);
+//		else if(args.if_pop("hybridnlpca"))
+//			return InstantiateHybridNonlinearPCA(args);
 		else if(args.if_pop("contentbased"))
 			return InstantiateContentBasedFilter(args);
 		else if(args.if_pop("cbcf"))
@@ -595,7 +567,7 @@ void GRecommenderLib::crossValidate(GArgReader& args)
 
 	// Instantiate the recommender
 	GCollaborativeFilter* pModel = InstantiateAlgorithm(args);
-	Holder<GCollaborativeFilter> hModel(pModel);
+	std::unique_ptr<GCollaborativeFilter> hModel(pModel);
 	if(args.size() > 0)
 		throw Ex("Superfluous argument: ", args.peek());
 	pModel->rand().setSeed(seed);
@@ -630,15 +602,15 @@ void GRecommenderLib::precisionRecall(GArgReader& args)
 
 	// Instantiate the recommender
 	GCollaborativeFilter* pModel = InstantiateAlgorithm(args);
-	Holder<GCollaborativeFilter> hModel(pModel);
+	std::unique_ptr<GCollaborativeFilter> hModel(pModel);
 	if(args.size() > 0)
 		throw Ex("Superfluous argument: ", args.peek());
 	pModel->rand().setSeed(seed);
 
 	// Generate precision-recall data
 	GMatrix* pResults = pModel->precisionRecall(data, ideal);
-	Holder<GMatrix> hResults(pResults);
-	pResults->deleteColumn(2); // we don't need the false-positive rate column
+	std::unique_ptr<GMatrix> hResults(pResults);
+	pResults->deleteColumns(2, 1); // we don't need the false-positive rate column
 	pResults->print(cout);
 }
 
@@ -665,16 +637,16 @@ void GRecommenderLib::ROC(GArgReader& args)
 
 	// Instantiate the recommender
 	GCollaborativeFilter* pModel = InstantiateAlgorithm(args);
-	Holder<GCollaborativeFilter> hModel(pModel);
+	std::unique_ptr<GCollaborativeFilter> hModel(pModel);
 	if(args.size() > 0)
 		throw Ex("Superfluous argument: ", args.peek());
 	pModel->rand().setSeed(seed);
 
 	// Generate ROC data
 	GMatrix* pResults = pModel->precisionRecall(data, ideal);
-	Holder<GMatrix> hResults(pResults);
+	std::unique_ptr<GMatrix> hResults(pResults);
 	double auc = GCollaborativeFilter::areaUnderCurve(*pResults);
-	pResults->deleteColumn(1); // we don't need the precision column
+	pResults->deleteColumns(1, 1); // we don't need the precision column
 	pResults->swapColumns(0, 1);
 	cout << "% Area Under the Curve = " << auc << "\n";
 	pResults->print(cout);
@@ -704,7 +676,7 @@ void GRecommenderLib::transacc(GArgReader& args)
 
 	// Instantiate the recommender
 	GCollaborativeFilter* pModel = InstantiateAlgorithm(args);
-	Holder<GCollaborativeFilter> hModel(pModel);
+	std::unique_ptr<GCollaborativeFilter> hModel(pModel);
 	if(args.size() > 0)
 		throw Ex("Superfluous argument: ", args.peek());
 	pModel->rand().setSeed(seed);
@@ -746,12 +718,12 @@ void GRecommenderLib::fillMissingValues(GArgReader& args)
 	// Throw out the ignored attributes
 	std::sort(ignore.begin(), ignore.end());
 	for(size_t i = ignore.size() - 1; i < ignore.size(); i--)
-		dataOrig.deleteColumn(ignore[i]);
+		dataOrig.deleteColumns(ignore[i], 1);
 
 	GRelation* pOrigRel = dataOrig.relation().clone();
-	Holder<GRelation> hOrigRel(pOrigRel);
+	std::unique_ptr<GRelation> hOrigRel(pOrigRel);
 	GCollaborativeFilter* pModel = InstantiateAlgorithm(args);
-	Holder<GCollaborativeFilter> hModel(pModel);
+	std::unique_ptr<GCollaborativeFilter> hModel(pModel);
 	if(args.size() > 0)
 		throw Ex("Superfluous argument: ", args.peek());
 	pModel->rand().setSeed(seed);
@@ -759,7 +731,7 @@ void GRecommenderLib::fillMissingValues(GArgReader& args)
 	// Convert to all normalized real values
 	GNominalToCat* pNtc = new GNominalToCat();
 	GIncrementalTransform* pFilter = pNtc;
-	Holder<GIncrementalTransformChainer> hChainer;
+	std::unique_ptr<GIncrementalTransformChainer> hChainer;
 	if(normalize)
 	{
 		GIncrementalTransformChainer* pChainer = new GIncrementalTransformChainer(new GNormalize(), pNtc);
@@ -769,48 +741,43 @@ void GRecommenderLib::fillMissingValues(GArgReader& args)
 	pNtc->preserveUnknowns();
 	pFilter->train(dataOrig);
 	GMatrix* pData = pFilter->transformBatch(dataOrig);
-	Holder<GMatrix> hData(pData);
+	std::unique_ptr<GMatrix> hData(pData);
 
 	// Convert to 3-column form
-	GMatrix* pMatrix = new GMatrix(0, 3);
-	Holder<GMatrix> hMatrix(pMatrix);
+	auto pMatrix = std::unique_ptr<GMatrix>(new GMatrix(0, 3));
 	size_t dims = pData->cols();
 	for(size_t i = 0; i < pData->rows(); i++)
 	{
-		double* pRow = pData->row(i);
+		GVec& row = pData->row(i);
 		for(size_t j = 0; j < dims; j++)
 		{
-			if(*pRow != UNKNOWN_REAL_VALUE)
+			if(row[j] != UNKNOWN_REAL_VALUE)
 			{
-				double* pVec = pMatrix->newRow();
-				pVec[0] = (double)i;
-				pVec[1] = (double)j;
-				pVec[2] = *pRow;
+				GVec& vec = pMatrix->newRow();
+				vec[0] = (double)i;
+				vec[1] = (double)j;
+				vec[2] = row[j];
 			}
-			pRow++;
 		}
 	}
 
 	// Train the collaborative filter
 	pModel->train(*pMatrix);
-	hMatrix.release();
-	pMatrix = NULL;
 
 	// Predict values for missing elements
 	for(size_t i = 0; i < pData->rows(); i++)
 	{
-		double* pRow = pData->row(i);
+		GVec& row = pData->row(i);
 		for(size_t j = 0; j < dims; j++)
 		{
-			if(*pRow == UNKNOWN_REAL_VALUE)
-				*pRow = pModel->predict(i, j);
-			GAssert(*pRow != UNKNOWN_REAL_VALUE);
-			pRow++;
+			if(row[j] == UNKNOWN_REAL_VALUE)
+				row[j] = pModel->predict(i, j);
+			GAssert(row[j] != UNKNOWN_REAL_VALUE);
 		}
 	}
 
 	// Convert the data back to its original form
-	GMatrix* pOut = pFilter->untransformBatch(*pData);
+	auto pOut = pFilter->untransformBatch(*pData);
 	pOut->setRelation(hOrigRel.release());
 	pOut->print(cout);
 }
@@ -822,10 +789,10 @@ void GRecommenderLib::ShowUsage(const char* appName)
 	cout << "<Angled brackets> are used to indicate optional arguments.\n";
 	cout << "\n";
 	UsageNode* pUsageTree = makeRecommendUsageTree();
-	Holder<UsageNode> hUsageTree(pUsageTree);
+	std::unique_ptr<UsageNode> hUsageTree(pUsageTree);
 	pUsageTree->print(cout, 0, 3, 76, 1000, true);
 	UsageNode* pUsageTree2 = makeCollaborativeFilterUsageTree();
-	Holder<UsageNode> hUsageTree2(pUsageTree2);
+	std::unique_ptr<UsageNode> hUsageTree2(pUsageTree2);
 	pUsageTree2->print(cout, 0, 3, 76, 1000, true);
 	cout.flush();
 }
@@ -837,7 +804,7 @@ void GRecommenderLib::showError(GArgReader& args, const char* szAppName, const c
 	args.set_pos(1);
 	const char* szCommand = args.peek();
 	UsageNode* pUsageTree = makeRecommendUsageTree();
-	Holder<UsageNode> hUsageTree(pUsageTree);
+	std::unique_ptr<UsageNode> hUsageTree(pUsageTree);
 	if(szCommand)
 	{
 		UsageNode* pUsageCommand = pUsageTree->choice(szCommand);
@@ -849,7 +816,7 @@ void GRecommenderLib::showError(GArgReader& args, const char* szAppName, const c
 			if(pUsageCommand->findPart("[collab-filter]") >= 0)
 			{
 				UsageNode* pAlgTree = makeCollaborativeFilterUsageTree();
-				Holder<UsageNode> hAlgTree(pAlgTree);
+				std::unique_ptr<UsageNode> hAlgTree(pAlgTree);
 				pAlgTree->print(cerr, 1, 3, 76, 2, false);
 			}
 		}

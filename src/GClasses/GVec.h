@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <vector>
+#include "GError.h"
 
 namespace GClasses {
 
@@ -31,17 +32,201 @@ class GDom;
 class GDomNode;
 class GImage;
 class GDomListIterator;
+class GVecWrapper;
 
 /// Contains some useful functions for operating on vectors
 class GVec
 {
+friend class GVecWrapper;
+protected:
+	double* m_data;
+	size_t m_size;
+
 public:
-	double* v;
+	/// General-purpose constructor. n specifies the initial size of the vector.
 	GVec(size_t n = 0);
+
+	/// General-purpose constructor. n specifies the initial size of the vector.
+	GVec(int n);
+
+	/// Unmarshaling constructor
+	GVec(GDomNode* pNode);
+
+	/// Copy constructor. Copies all the values in orig.
+	GVec(const GVec& orig);
+
+	/// Copies all the values in orig.
 	~GVec();
+
+	/// Returns the size of this vector.
+	size_t size() const { return m_size; }
+
+	/// Copies all the values in orig.
+	void copy(const GVec& orig);
 
 	/// Resizes this vector
 	void resize(size_t n);
+
+	/// Sets all the elements in this vector to val.
+	void fill(const double val, size_t startPos = 0, size_t endPos = (size_t)-1);
+
+	/// \brief Returns a reference to the specified element.
+	inline double& operator [](size_t index)
+	{
+		GAssert(index < m_size);
+		return m_data[index];
+	}
+
+	/// \brief Returns a const reference to the specified element
+	inline const double& operator [](size_t index) const
+	{
+		GAssert(index < m_size);
+		return m_data[index];
+	}
+
+	/// Returns a pointer to the raw element values.
+	double* data() { return m_data; }
+
+	/// Returns a const pointer to the raw element values.
+	const double* data() const { return m_data; }
+
+	/// Adds two vectors to make a new one.
+	GVec operator+(const GVec& that) const;
+
+	/// Adds another vector to this one.
+	GVec& operator+=(const GVec& that);
+
+	/// Subtracts a vector from this one to make a new one.
+	GVec operator-(const GVec& that) const;
+
+	/// Subtracts another vector from this one.
+	GVec& operator-=(const GVec& that);
+
+	/// Makes a scaled version of this vector.
+	GVec operator*(double scalar) const;
+
+	/// Scales this vector.
+	GVec& operator*=(double scalar);
+
+	/// Sets the data in this vector.
+	void set(const double* pSource, size_t size);
+
+	/// Returns the squared Euclidean magnitude of this vector.
+	double squaredMagnitude() const;
+
+	/// Scales this vector to have a magnitude of 1.0.
+	void normalize();
+
+	/// Scales this vector such that the elements sum to 1.0.
+	void sumToOne();
+
+	/// Returns the squared Euclidean distance between this and that vector.
+	double squaredDistance(const GVec& that) const;
+
+	/// Fills with random values from a uniform distribution.
+	void fillUniform(GRand& rand, double min = 0.0, double max = 1.0);
+
+	/// Fills with random values from a Normal distribution.
+	void fillNormal(GRand& rand, double deviation = 1.0);
+
+	/// Fills with random values on the surface of a sphere.
+	void fillSphericalShell(GRand& rand, double radius = 1.0);
+
+	/// Fills with random values uniformly distributed within a sphere of radius 1.
+	void fillSphericalVolume(GRand& rand);
+
+	/// Fills with random values uniformly distributed within a probability simplex.
+	/// In other words, the values will sum to 1, will all be non-negative,
+	/// and will not be biased toward or away from any of the extreme corners.
+	void fillSimplex(GRand& rand);
+
+	/// Prints a representation of this vector to the specified stream.
+	void print(std::ostream& stream = std::cout) const;
+
+	/// Returns the sum of the elements in this vector
+	double sum() const;
+
+	/// Returns the index of the max element.
+	/// The returned value will be >= startPos.
+	/// The returned value will be < endPos.
+	size_t indexOfMax(size_t startPos = 0, size_t endPos = (size_t)-1) const;
+
+	/// Marshals this vector into a DOM node.
+	GDomNode* serialize(GDom* pDoc) const;
+
+	/// Unmarshals this vector from a DOM.
+	void deserialize(const GDomNode* pNode);
+
+	/// Returns the dot product of this and that.
+	double dotProduct(const GVec& that) const;
+
+	/// Returns the dot product of this and that, ignoring elements in which either vector has UNKNOWN_REAL_VALUE.
+	double dotProductIgnoringUnknowns(const GVec& that) const;
+
+	/// Estimates the squared distance between two points that may have some missing values. It assumes
+	/// the distance in missing dimensions is approximately the same as the average distance in other
+	/// dimensions. If there are no known dimensions that overlap between the two points, it returns
+	/// 1e50.
+	double estimateSquaredDistanceWithUnknowns(const GVec& that) const;
+
+	/// Adds scalar * that to this vector.
+	void addScaled(double scalar, const GVec& that);
+
+	/// Applies L1 regularization to this vector.
+	void regularize_L1(double amount);
+
+	/// Puts a copy of that at the specified location in this.
+	/// Throws an exception if it does not fit there.
+	void put(size_t pos, const GVec& that, size_t start = 0, size_t length = (size_t)-1);
+
+	/// Erases the specified elements. The remaining elements are shifted over.
+	/// The size of the vector is decreased, but the buffer is not reallocated
+	/// (so this operation wastes some memory to save a little time).
+	void erase(size_t start, size_t count = 1);
+
+	/// Returns the cosine of the angle between this and that (with the origin as the common vertex).
+	double correlation(const GVec& that) const;
+
+	/// Clips all values in this vector to fall in the range [min, max].
+	void clip(double min, double max);
+
+	/// Subtracts a component from this vector. Uses the Gram-Schmidt approach.
+	/// (Assumes component is already normalized.)
+	void subtractComponent(const GVec& component);
+
+	/// Decode this vector into an image.
+	/// channels must be 1 or 3 (for grayscale or rgb)
+	/// range specifies the range of channel values. Typical values are 1.0 or 255.0.
+	/// Pixels are visited in reading order (left-to-right, top-to-bottom).
+	void toImage(GImage* pImage, int width, int height, int channels, double range) const;
+
+	/// Encode an image in this vector by rastering across pixel values.
+	/// channels must be 1 or 3 (for grayscale or rgb)
+	/// range specifies the range of channel values. Typical values are 1.0 or 255.0.
+	/// Pixels are visited in reading order (left-to-right, top-to-bottom).
+	void fromImage(GImage* pImage, int width, int height, int channels, double range);
+
+private:
+	/// This method is deliberately private, so calling it will trigger a compiler error. Call "copy" instead.
+	GVec& operator=(const GVec& orig);
+
+	/// This method is deliberately private, so calling it will trigger a compiler error. Call "fill" instead.
+	GVec(double d);
+
+public:
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 #ifndef MIN_PREDICT
 	/// Performs unit tests for this class. Throws an exception if there is a failure.
@@ -55,10 +240,6 @@ public:
 
 	/// This just wraps memcpy
 	static void copy(double* pDest, const double* pSource, size_t nDims);
-
-	/// Computes the dot product of two vectors. Results are undefined if pA or pB
-	/// contain unknown values.
-	static double dotProduct(const double* pA, const double* pB, size_t nSize);
 
 	/// Computes the dot product of (pTarget - pOrigin) with pVector.
 	static double dotProduct(const double* pOrigin, const double* pTarget, const double* pVector, size_t nSize);
@@ -103,15 +284,6 @@ public:
 
 	/// Computes L-Norm distance (norm=1 is manhattan distance, norm=2 is Euclidean distance, norm=infinity is Chebychev, etc.)
 	static double lNormDistance(double norm, const double* pA, const double* pB, size_t dims);
-
-	/// Computes the cosine of the angle between two vectors (the origin is the vertex)
-	static double correlation(const double* pA, const double* pB, size_t nDims);
-
-	/// Computes the cosine of the angle between two vectors (the origin is the vertex)
-	static double correlation(const double* pOriginA, const double* pTargetA, const double* pB, size_t nDims);
-
-	/// Computes the cosine of the angle between two vectors (the origin is the vertex)
-	static double correlation(const double* pOriginA, const double* pTargetA, const double* pOriginB, const double* pTargetB, size_t nDims);
 
 	/// Returns the index of the min value in pVector. If multiple elements have
 	/// have an equivalent max value, then behavior depends on the value of pRand.
@@ -170,14 +342,8 @@ public:
 	/// in the list of corresponding indexes, the ends may drift.
 	static void interpolateIndexes(size_t nIndexes, double* pInIndexes, double* pOutIndexes, float fRatio, size_t nCorrIndexes, double* pCorrIndexes1, double* pCorrIndexes2);
 
-	/// Rotates pVector by dAngle radians in the plane defined by the orthogonal axes pA and pB
-	static void rotate(double* pVector, size_t nDims, double dAngle, const double* pA, const double* pB);
-
-	/// Adds Gaussian noise with the specified deviation to each element in the matrix
+	/// Adds Gaussian noise with the specified deviation to each element in the vector
 	static void perturb(double* pDest, double deviation, size_t dims, GRand& rand);
-
-	/// Adds the function pIn to pOut after interpolating pIn to be the same size as pOut.
-	static void addInterpolatedFunction(double* pOut, size_t nOutVals, double* pIn, size_t nInVals);
 
 	/// Write the vector to a text format
 	static GDomNode* serialize(GDom* pDoc, const double* pVec, size_t dims);
@@ -188,116 +354,46 @@ public:
 
 	/// Prints the values in the vector separated by ", ".
 	/// precision specifies the number of digits to print
-	static void print(std::ostream& stream, int precision, const double* pVec, size_t dims);
+//	static void print(std::ostream& stream, int precision, const double* pVec, size_t dims);
 
 	/// Projects pPoint onto the hyperplane defined by pOrigin onto the basisCount basis vectors
 	/// specified by pBasis. (The basis vectors are assumed to be chained end-to-end in a big vector.)
 	static void project(double* pDest, const double* pPoint, const double* pOrigin, const double* pBasis, size_t basisCount, size_t dims);
 
-	/// Subtracts the component of pInOut that projects onto pBasis. (Assumes that pBasis is normalized.)
-	/// This might be used, for example, to implement the modified Gram-Schmidt process.
-	static void subtractComponent(double* pInOut, const double* pBasis, size_t dims);
-
-	/// Subtracts the component of pInOut that projects onto (pTarget - pOrigin).
-	/// This might be used, for example, to implement the modified Gram-Schmidt process.
-	static void subtractComponent(double* pInOut, const double* pOrigin, const double* pTarget, size_t dims);
-
 	/// Returns the sum of all the elements
 	static double sumElements(const double* pVec, size_t dims);
 
-	/// Returns the sum of the absolute values of all the elements
-	static double sumAbsoluteValues(const double* pVec, size_t dims);
-
-	/// Moves the smallest k values to the front of the vector, and the biggest (size - k) values
-	/// to the end of the vector. (For efficiency, no other guarantees about ordering are made.)
-	/// This has an average-case runtime that is linear with respect to size.
-	/// pParallel1 and pParallel2 are optional arrays that should be arranged to keep their
-	/// indices in sync with pVec.
-	static void smallestToFront(double* pVec, size_t k, size_t size, double* pParallel1 = NULL, size_t* pParallel2 = NULL, double* pParallel3 = NULL);
-
-	/// Moves "pPoint" so that it is closer to a distance of "distance" from "pNeighbor". "learningRate"
-	/// specifies how much to move it (0=not at all, 1=all the way). Returns the squared distance between
-	/// pPoint and pNeighbor.
-	static double refinePoint(double* pPoint, double* pNeighbor, size_t dims, double distance, double learningRate, GRand* pRand);
-
-	/// Converts a vector of rasterized pixel values to an image.
-	/// channels must be 1 or 3 (for grayscale or rgb)
-	/// range specifies the range of channel values. Typical values are 1.0 or 255.0.
-	/// Pixels are visited in reading order (left-to-right, top-to-bottom).
-	static void toImage(const double* pVec, GImage* pImage, int width, int height, int channels, double range);
-
-	/// Converts an image to a vector of rasterized pixel values.
-	/// channels must be 1 or 3 (for grayscale or rgb)
-	/// range specifies the range of channel values. Typical values are 1.0 or 255.0.
-	/// Pixels are visited in reading order (left-to-right, top-to-bottom).
-	/// pVec must be big enough to hold width * height * channels values.
-	static void fromImage(GImage* pImage, double* pVec, int width, int height, int channels, double range);
-
-	/// Sets each value, v, to MIN(cap, v)
-	static void capValues(double* pVec, double cap, size_t dims);
-
-	/// Sets each value, v, to MAX(floor, v)
-	static void floorValues(double* pVec, double floor, size_t dims);
+	/// Sets each value, v, to ABS(v)
+	static void absValues(double* pVec, size_t dims);
 };
 
 
-/// Holds an array of doubles that can be resized. This class is
-/// slightly lighter-weight than the C++ vector class, and it
-/// allows access to the buffer in the form of an array of doubles.
-/// Basically, it is useful when working with C-style functions
-/// that expect parameters in the form of an array of doubles, rather
-/// than as a vector of doubles.
-class GVecBuf
+/// This class temporarily wraps a GVec around a const array of doubles.
+/// You should take care to ensure this object is destroyed before the array it wraps.
+class GVecWrapper
 {
+protected:
+	GVec m_v;
+
 public:
-	double* m_pBuf;
-	size_t m_size;
-
-	GVecBuf()
-	: m_pBuf(NULL), m_size(0)
+	GVecWrapper(const double* buf, size_t size)
 	{
+		m_v.m_data = (double*)buf;
+		m_v.m_size = size;
 	}
 
-	~GVecBuf()
+	~GVecWrapper()
 	{
-		delete[] m_pBuf;
+		m_v.m_data = NULL;
+		m_v.m_size = 0;
 	}
 
-	/// Returns the current size of the buffer
-	size_t size()
+	const GVec& vec()
 	{
-		return m_size;
-	}
-
-	/// Resizes the array, nomatter what, and destroys any existing contents
-	void resize(size_t size)
-	{
-		delete[] m_pBuf;
-		m_pBuf = new double[size];
-		m_size = size;
-	}
-
-	/// Resizes the array if necessary, preserving the contents
-	void grow(size_t size)
-	{
-		if(size > m_size)
-		{
-			double* pNew = new double[size];
-			GVec::copy(pNew, m_pBuf, m_size);
-			m_size = size;
-			delete[] m_pBuf;
-			m_pBuf = pNew;
-		}
-	}
-
-	/// Ensures that the array is at least the specified size. Resizes
-	/// (destroying the contents) if it is not.
-	void reserve(size_t size)
-	{
-		if(size > m_size)
-			resize(size);
+		return m_v;
 	}
 };
+
 
 
 /// Useful functions for operating on vectors of indexes

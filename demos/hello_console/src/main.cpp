@@ -22,31 +22,16 @@
 #include <GClasses/GError.h>
 
 using namespace GClasses;
-using std::cerr;
 using std::cout;
-
-void doit(GArgReader& args)
-{
-	cout << "Hello console!\n";
-}
 
 int main(int argc, char *argv[])
 {
-#ifdef _DEBUG
 	GApp::enableFloatingPointExceptions();
-#endif
-	int nRet = 0;
-	try
-	{
-		GArgReader args(argc, argv);
-		doit(args);
-	}
-	catch(const std::exception& e)
-	{
-		cerr << e.what() << "\n";
-		nRet = 1;
-	}
+	if(argc > 1)
+		throw Ex("No args were expected");
 
-	return nRet;
+	cout << "Hello console!\n";
+
+	return 0;
 }
 

@@ -40,9 +40,9 @@ using std::string;
 
 #define SOFTPLUS_NODES 2
 #define IDENTITY_NODES 4
-#define SOFTPLUS_SHIFT 10
+#define SOFTPLUS_SHIFT 5
 #define PERTURBATION 1e-4
-#define TRAINING_EPOCHS 6000
+#define TRAINING_EPOCHS 50000
 #define REGULARIZATION_TERM 0.01
 #define LEARNING_RATE 1e-3
 
@@ -57,14 +57,15 @@ void plot_it(const char* filename, GNeuralNet& nn, GMatrix& trainFeat, GMatrix& 
 	double prevx = xmin;
 	double prevy = 0.0;
 	double step = (xmax - xmin) / 500.0;
-	for(double x = prevx; x < xmax; x += step)
+	GVec x(1);
+	GVec y(1);
+	for(x[0] = prevx; x[0] < xmax; x[0] += step)
 	{
-		double y;
-		nn.predict(&x, &y);
-		if(prevx != x)
-			svg.line(prevx, prevy, x, y, 0.3);
-		prevx = x;
-		prevy = y;
+		nn.predict(x, y);
+		if(prevx != x[0])
+			svg.line(prevx, prevy, x[0], y[0], 0.3);
+		prevx = x[0];
+		prevy = y[0];
 	}
 	for(size_t i = 0; i < trainLab.rows(); i++)
 		svg.dot(trainFeat[i][0], trainLab[i][0], 0.4, 0xff000080);
@@ -87,12 +88,16 @@ void doit()
 	}
 	trainLab.loadArff("train.arff");
 	testLab.loadArff("test.arff");
+	double dataMin = trainLab.columnMin(0);
+	double dataMax = trainLab.columnMax(0);
+	trainLab.normalizeColumn(0, dataMin, dataMax, -5.0, 5.0);
+	testLab.normalizeColumn(0, dataMin, dataMax, -5.0, 5.0);
 	GMatrix trainFeat(trainLab.rows(), 1);
 	for(size_t i = 0; i < trainLab.rows(); i++)
-		trainFeat[i][0] = (double)i / trainLab.rows();
+		trainFeat[i][0] = (double)i / trainLab.rows() - 0.5;
 	GMatrix testFeat(testLab.rows(), 1);
 	for(size_t i = 0; i < testLab.rows(); i++)
-		testFeat[i][0] = (double)(i + trainLab.rows()) / trainLab.rows();
+		testFeat[i][0] = (double)(i + trainLab.rows()) / trainLab.rows() - 0.5;
 
 	// Make a neural network
 	GNeuralNet nn;
@@ -100,10 +105,10 @@ void doit()
 	nn.beginIncrementalLearning(relOne, relOne);
 
 	// Initialize the weights of the sine units to match the frequencies used by the Fourier transform.
-	GLayerClassic* pSine2 = new GLayerClassic(1, trainLab.rows(), new GActivationSin());
+	GLayerClassic* pSine2 = new GLayerClassic(1, 64, new GActivationSin());
 	GMatrix& wSin = pSine2->weights();
-	double* bSin = pSine2->bias();
-	for(size_t i = 0; i < trainLab.rows() / 2; i++)
+	GVec& bSin = pSine2->bias();
+	for(size_t i = 0; i < pSine2->outputs() / 2; i++)
 	{
 		wSin[0][2 * i] = 2.0 * M_PI * (i + 1);
 		bSin[2 * i] = 0.5 * M_PI;
@@ -142,7 +147,7 @@ void doit()
 	pIdentity3->perturbWeights(nn.rand(), PERTURBATION);
 
 	// Open Firefox to view the progress
-	GApp::systemCall("firefox view.html#progress.svg", false, true);
+	GApp::systemCall("firefox ./view.html#progress.svg", false, true);
 
 	// Do some training
 	GRandomIndexIterator ii(trainLab.rows(), nn.rand());

@@ -30,6 +30,7 @@ class GMatrix;
 class GRand;
 class GDomNode;
 class GDom;
+class GVec;
 
 typedef std::map<size_t,double> SparseVec;
 
@@ -50,7 +51,7 @@ public:
 	GSparseMatrix(size_t rows, size_t cols, double defaultValue = 0.0);
 
 	/// Deserializes a sparse matrix
-	GSparseMatrix(GDomNode* pNode);
+	GSparseMatrix(const GDomNode* pNode);
 
 	~GSparseMatrix();
 
@@ -73,7 +74,7 @@ public:
 	size_t cols() const { return m_cols; }
 
 	/// Copies a row into a non-sparse vector
-	void fullRow(double* pOutFullRow, size_t row);
+	void fullRow(GVec& outFullRow, size_t row);
 
 	/// Returns a const_iterator to the beginning of a row. The iterator
 	/// references a pair, such that first is the column, and second is the value.
@@ -153,10 +154,10 @@ public:
 	/// number of columns in this matrix.
 	/// (To compute the next principal component, call RemoveComponent,
 	/// then call this method again.)
-	void principalComponentAboutOrigin(double* pOutVector, GRand* pRand);
+	void principalComponentAboutOrigin(GVec& outVector, GRand* pRand);
 
 	/// Removes the specified component, assuming the mean is at the origin.
-	void removeComponentAboutOrigin(const double* pComponent);
+	void removeComponentAboutOrigin(const GVec& component);
 
 	/// Returns a k-row dense matrix containing the first k principal components of this sparse matrix.
 	GMatrix* firstPrincipalComponents(size_t k, GRand& rand);
@@ -174,10 +175,13 @@ class GSparseVec
 {
 public:
 	/// Computes the dot product of a sparse vector with a dense vector
-	static double dotProduct(SparseVec& sparse, double* pDense);
+	static double dotProduct(SparseVec& sparse, GVec& dense);
 
 	/// Computes the dot product of two sparse vectors
 	static double dotProduct(SparseVec& a, SparseVec& b);
+
+	/// Returns the number of elements that the two vectors both specify in common
+	static size_t count_matching_elements(SparseVec& a, SparseVec& b);
 };
 
 

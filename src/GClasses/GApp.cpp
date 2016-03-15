@@ -134,7 +134,7 @@ void GPipe::write(const char* buf, size_t bufSize)
 void GPipe::toFile(const char* szFilename)
 {
 	std::ofstream s;
-	s.exceptions(std::ios::badbit);
+	s.exceptions(std::ios::badbit | std::ios::failbit);
 	try
 	{
 		s.open(szFilename, std::ios::binary);
@@ -518,7 +518,7 @@ int GApp::systemExecute(const char* szCommand, bool wait, GPipe* pStdOut, GPipe*
 	int argc = GApp_CountArgs(szCopy);
 	if(argc == 0)
 		return 0;
-	char* argv[argc + 1];
+	GTEMPBUF(char*, argv, argc + 1);
 	GApp_ParseArgs(szCopy, argv, 0x7fffffff);
 
 	// Create a pipe for stdout

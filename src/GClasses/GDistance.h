@@ -24,10 +24,12 @@
 #include "GMatrix.h"
 #include <map>
 #include <vector>
+#include "GKernelTrick.h"
 
 namespace GClasses {
 
-static size_t _dummy_var = 0;
+class GKernel;
+
 
 /// This class enables you to define a distance (or dissimilarity) metric between two vectors.
 /// pScaleFactors is an optional parameter (it can be NULL) that lets the calling class
@@ -40,11 +42,19 @@ class GDistanceMetric
 protected:
 	const GRelation* m_pRelation;
 	bool m_ownRelation;
+	GVec m_scaleFactors;
 
 public:
 	GDistanceMetric() : m_pRelation(NULL), m_ownRelation(false) {}
 	GDistanceMetric(GDomNode* pNode);
 	virtual ~GDistanceMetric();
+
+#ifndef NO_TEST_CODE
+	static void test();
+#endif
+
+	/// Returns the name of this class
+	virtual const char* name() const = 0;
 
 	/// Marshal this object into a DOM, which can then be converted to a variety of serial formats.
 	virtual GDomNode* serialize(GDom* pDoc) const = 0;
@@ -52,32 +62,15 @@ public:
 	/// This must be called before squaredDistance can be called. Takes ownership of pRelation iff own is true.
 	virtual void init(const GRelation* pRelation, bool own) = 0;
 
-	/// Return the squared distance (or squared dissimilarity) between the two specified vectors.
- 	///
-	/// It is assumed that a and b are vectors of the same
-	/// dimension - and that that dimension is compatible with the
-	/// relation given in init.  By default uses
-	/// squaredDistance(const double*, const double*) const so
-	/// subclassers only need to change that method.
-	virtual double squaredDistance(const std::vector<double> & a, const std::vector<double> & b) const;
-
 	/// Computes the squared distance (or squared dissimilarity) between the two specified vectors
-	virtual double squaredDistance(const double* pA, const double* pB) const = 0;
-
-	/// Return squaredDistance(a,b).  Allows dissimilarity metrics
-	/// to be used as function objects.  Do not override.
-	/// Override squaredDistance(a,b) instead.  See GDistanceMetric::squaredDistance(const std::vector<double>&, const std::vector<double>&)
-	inline double operator()(const std::vector<double> & a, const std::vector<double> & b) const
-	{
-		return squaredDistance(a,b);
-	}
+	virtual double squaredDistance(const GVec& a, const GVec& b) const = 0;
 
 	/// Return squaredDistance(pA, pB).  Allows dissimilarity metrics to
 	/// be used as function objects.  Do not override.  Override
-	/// squaredDistance(pA,pB) instead.  See GDistanceMetric::squaredDistance(const double*, const double*)
-	inline double operator()(const double* pA, const double* pB) const
+	/// squaredDistance(pA,pB) instead.  See GDistanceMetric::squaredDistance(const GVec&, const GVec&)
+	inline double operator()(const GVec& a, const GVec& b) const
 	{
-		return squaredDistance(pA,pB);
+		return squaredDistance(a, b);
 	}
 
 	/// Returns the relation that specifies the meaning of the vector elements
@@ -86,12 +79,11 @@ public:
 	/// Deserializes a distance metric
 	static GDistanceMetric* deserialize(GDomNode* pNode);
 
-	/// Returns a pointer to the vector of scale factors.  This
-	/// may be NULL if the metric does not use scale factors.
-	virtual double* scaleFactors() { return NULL; }
+	/// Returns a reference to the vector of attribute scalars.
+	virtual GVec& scaleFactors() { return m_scaleFactors; }
 
 protected:
-	GDomNode* baseDomNode(GDom* pDoc, const char* szClassName) const;
+	GDomNode* baseDomNode(GDom* pDoc) const;
 
 	/// Sets the relation to use with this metric. Takes ownership
 	/// of the relation iff own is true.
@@ -113,8 +105,10 @@ protected:
 public:
 	GRowDistance();
 	GRowDistance(GDomNode* pNode);
-
 	virtual ~GRowDistance() {}
+
+	/// Returns the name of this class
+	virtual const char* name() const { return "GRowDistance"; }
 
 	/// See the comment for GDistanceMetric::serialize
 	virtual GDomNode* serialize(GDom* pDoc) const;
@@ -122,48 +116,14 @@ public:
 	/// See the comment for GDistanceMetric::init.
 	virtual void init(const GRelation* pRelation, bool own);
 
-	/// Returns the distance between pA and pB
-	virtual double squaredDistance(const double* pA, const double* pB) const;
+	/// Returns the distance between a and b
+	virtual double squaredDistance(const GVec& a, const GVec& b) const;
 
 	/// Specify the difference to use when one or more of the values is unknown.
 	/// (If your data contains unknown values, you may want to normalize the
 	/// known values to fall within some pre-determined range, so that it will
 	/// be possible to select a reasonable value for this purpose.)
 	void setDiffWithUnknown(double d) { m_diffWithUnknown = d; }
-};
-
-
-
-
-/// This uses a combination of Euclidean distance for continuous
-/// attributes, and Hamming distance for nominal attributes.  This
-/// version honors scale factors given by the user.  See comments on
-/// GRowDistance.
-class GRowDistanceScaled : public GDistanceMetric
-{
-protected:
-        double* m_pScaleFactors;
-
-public:
-        GRowDistanceScaled() : m_pScaleFactors(NULL) {}
-        GRowDistanceScaled(GDomNode* pNode);
-
-        virtual ~GRowDistanceScaled()
-        {
-                delete[] m_pScaleFactors;
-        }
-
-        /// See the comment for GDistanceMetric::serialize
-        virtual GDomNode* serialize(GDom* pDoc) const;
-
-        /// See the comment for GDistanceMetric::init.
-        virtual void init(const GRelation* pRelation, bool own);
-
-        /// Returns the scaled distance between pA and pB
-        virtual double squaredDistance(const double* pA, const double* pB) const;
-
-        /// Returns the vector of scalar values associated with each dimension
-        virtual double* scaleFactors() { return m_pScaleFactors; }
 };
 
 
@@ -181,6 +141,10 @@ protected:
 public:
 	GLNormDistance(double norm);
 	GLNormDistance(GDomNode* pNode);
+	virtual ~GLNormDistance() {}
+
+	/// Returns the name of this class
+	virtual const char* name() const { return "GLNormDistance"; }
 
 	/// See the comment for GDistanceMetric::serialize
 	virtual GDomNode* serialize(GDom* pDoc) const;
@@ -189,13 +153,65 @@ public:
 	virtual void init(const GRelation* pRelation, bool own);
 
 	/// Returns the distance (using the norm passed to the constructor) between pA and pB
-	virtual double squaredDistance(const double* pA, const double* pB) const;
+	virtual double squaredDistance(const GVec& a, const GVec& b) const;
 
 	/// Specify the difference to use when one or more of the values is unknown.
 	/// (If your data contains unknown values, you may want to normalize the
 	/// known values to fall within some pre-determined range, so that it will
 	/// be possible to select a reasonable value for this purpose.)
 	void setDiffWithUnknown(double d) { m_diffWithUnknown = d; }
+};
+
+
+
+
+/// Returns 1 minus the cosine of the angle between the two vectors with the origin.
+class GDenseCosineDistance : public GDistanceMetric
+{
+public:
+	GDenseCosineDistance();
+	GDenseCosineDistance(GDomNode* pNode);
+	virtual ~GDenseCosineDistance() {}
+
+	/// Returns the name of this class
+	virtual const char* name() const { return "GDenseCosineDistance"; }
+
+	/// See the comment for GDistanceMetric::serialize
+	virtual GDomNode* serialize(GDom* pDoc) const;
+
+	/// See the comment for GDistanceMetric::init.
+	virtual void init(const GRelation* pRelation, bool own);
+
+	/// Returns the distance (using the norm passed to the constructor) between pA and pB
+	virtual double squaredDistance(const GVec& a, const GVec& b) const;
+};
+
+
+
+
+/// Returns 1 minus the cosine of the angle between the two vectors with the origin.
+class GKernelDistance : public GDistanceMetric
+{
+protected:
+	GKernel* m_pKernel;
+	bool m_ownKernel;
+
+public:
+	GKernelDistance(GKernel* pKernel, bool own);
+	GKernelDistance(GDomNode* pNode);
+	virtual ~GKernelDistance();
+
+	/// Returns the name of this class
+	virtual const char* name() const { return "GKernelDistance"; }
+
+	/// See the comment for GDistanceMetric::serialize
+	virtual GDomNode* serialize(GDom* pDoc) const;
+
+	/// See the comment for GDistanceMetric::init.
+	virtual void init(const GRelation* pRelation, bool own);
+
+	/// Returns the distance (using the norm passed to the constructor) between pA and pB
+	virtual double squaredDistance(const GVec& a, const GVec& b) const;
 };
 
 
@@ -218,10 +234,13 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const = 0;
 
 	/// Computes the similarity between two sparse vectors
-	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b, size_t &count=_dummy_var) = 0;
+	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b) = 0;
 
 	/// Computes the similarity between a sparse and a dense vector
-	virtual double similarity(const std::map<size_t,double>& a, const double* pB, size_t &count=_dummy_var) = 0;
+	virtual double similarity(const std::map<size_t,double>& a, const GVec& b) = 0;
+
+	/// Computes the similarity between two dense vectors
+	virtual double similarity(const GVec& a, const GVec& b) = 0;
 
 	/// Load from a DOM.
 	static GSparseSimilarity* deserialize(GDomNode* pNode);
@@ -244,10 +263,13 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// Computes the similarity between two sparse vectors
-	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b, size_t &count=_dummy_var);
+	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b);
 
 	/// Computes the similarity between a sparse and a dense vector
-	virtual double similarity(const std::map<size_t,double>& a, const double* pB, size_t &count=_dummy_var);
+	virtual double similarity(const std::map<size_t,double>& a, const GVec& b);
+
+	/// Computes the similarity between two dense vectors
+	virtual double similarity(const GVec& a, const GVec& b);
 };
 
 
@@ -263,32 +285,38 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// Computes the similarity between two sparse vectors
-	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b, size_t &count=_dummy_var);
+	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b);
 
 	/// Computes the similarity between a sparse and a dense vector
-	virtual double similarity(const std::map<size_t,double>& a, const double* pB, size_t &count=_dummy_var);
+	virtual double similarity(const std::map<size_t,double>& a, const GVec& b);
+
+	/// Computes the similarity between two dense vectors
+	virtual double similarity(const GVec& a, const GVec& b);
 };
 
 
 /// This computes the reciprocal of Euclidean distance, where all missing values are simply ignored.
-class GEulcidSimilarity : public GSparseSimilarity
+class GEuclidSimilarity : public GSparseSimilarity
 {
 protected:
 	double m_squaredMissingPenalty;
 
 public:
-	GEulcidSimilarity() : GSparseSimilarity() {}
-	GEulcidSimilarity(GDomNode* pNode) : GSparseSimilarity() {}
-	virtual ~GEulcidSimilarity() {}
+	GEuclidSimilarity() : GSparseSimilarity() {}
+	GEuclidSimilarity(GDomNode* pNode) : GSparseSimilarity() {}
+	virtual ~GEuclidSimilarity() {}
 
 	/// See the comment for GSparseSimilarity::serialize
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// Computes the similarity between two sparse vectors
-	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b, size_t& count=_dummy_var);
+	virtual double similarity(const std::map<size_t,double>& a, const std::map<size_t,double>& b);
 
 	/// Computes the similarity between a sparse and a dense vector
-	virtual double similarity(const std::map<size_t,double>& a, const double* pB, size_t& count=_dummy_var);
+	virtual double similarity(const std::map<size_t,double>& a, const GVec& b);
+
+	/// Computes the similarity between two dense vectors
+	virtual double similarity(const GVec& a, const GVec& b);
 };
 
 

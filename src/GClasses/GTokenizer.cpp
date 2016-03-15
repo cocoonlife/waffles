@@ -43,7 +43,7 @@ namespace GClasses {
 
 
 GCharSet::GCharSet(const char* szChars)
-	: m_bt(256)
+: m_bt(256)
 {
 	char c = '\0';
 	while(*szChars != '\0')
@@ -79,7 +79,7 @@ GTokenizer::GTokenizer(const char* szFilename)
 {
 	std::ifstream* pStream = new std::ifstream();
 	m_pStream = pStream;
-	pStream->exceptions(std::ios::badbit);
+	pStream->exceptions(std::ios::badbit); // don't include std::ios::failbit here because the has_more method reads first, then checks for EOF.
 	try
 	{
 		pStream->open(szFilename, std::ios::binary);
@@ -88,6 +88,8 @@ GTokenizer::GTokenizer(const char* szFilename)
 	{
 		throw Ex("Error while trying to open the file, ", szFilename, ". ", strerror(errno));
 	}
+	if(pStream->fail())
+		throw Ex("Error while trying to open the file, ", szFilename, ". ", strerror(errno));
 	m_qPos = 0;
 	m_qCount = 0;
 	m_pBufStart = new char[256];
@@ -302,14 +304,13 @@ char* GTokenizer::nextArg(GCharSet& delimiters, char escapeChar)
 	{
 		bufferChar('"');
 		advance(1);
-		GCharSet cs("\"\n");
 		while(has_more())
 		{
-			char c = peek();
-			if(cs.find(c))
+			char c2 = peek();
+			if(c2 == '\"' || c2 == '\n')
 				break;
-			c = get();
-			bufferChar(c);
+			c2 = get();
+			bufferChar(c2);
 		}
 		if(peek() != '"')
 			throw Ex("Expected matching double-quotes on line ",
@@ -324,14 +325,13 @@ char* GTokenizer::nextArg(GCharSet& delimiters, char escapeChar)
 	{
 		bufferChar('\'');
 		advance(1);
-		GCharSet cs("'\n");
 		while(has_more())
 		{
-			char c = peek();
-			if(cs.find(c))
+			char c2 = peek();
+			if(c2 == '\'' || c2 == '\n')
 				break;
-			c = get();
-			bufferChar(c);
+			c2 = get();
+			bufferChar(c2);
 		}
 		if(peek() != '\'')
 			throw Ex("Expected a matching single-quote on line ", to_str(m_line),
@@ -346,26 +346,26 @@ char* GTokenizer::nextArg(GCharSet& delimiters, char escapeChar)
 	bool inEscapeMode = false;
 	while(has_more())
 	{
-		char c = peek();
+		char c2 = peek();
 		if(inEscapeMode)
 		{
-			if(c == '\n')
+			if(c2 == '\n')
 			{
 				throw Ex("Error: '", to_str(escapeChar), "' character used as "
 									 "last character on a line to attempt to extend string over "
 									 "two lines on line" , to_str(m_line), ", col ",
 									 to_str(col()) );
 			}
-			c = get();
-			bufferChar(c);
+			c2 = get();
+			bufferChar(c2);
 			inEscapeMode = false;
 		}
 		else
 		{
-			if(c == '\n' || delimiters.find(c)){ break; }
-			c = get();
-			if(c == escapeChar)	{	inEscapeMode = true;	}
-			else { bufferChar(c);	}
+			if(c2 == '\n' || delimiters.find(c2)){ break; }
+			c2 = get();
+			if(c2 == escapeChar)	{	inEscapeMode = true;	}
+			else { bufferChar(c2);	}
 		}
 	}
 

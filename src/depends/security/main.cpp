@@ -6,12 +6,14 @@
 // (http://www.opensource.org/licenses).
 // -------------------------------------------------------------
 
+#include "crawler.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../GClasses/GHttp.h"
 #include "../../GClasses/GApp.h"
 #include "../../GClasses/GBits.h"
 #include "../../GClasses/GDirList.h"
+#include "../../GClasses/GDynamicPage.h"
 #include "../../GClasses/GCrypto.h"
 #include "../../GClasses/GError.h"
 #include "../../GClasses/GHolders.h"
@@ -23,6 +25,7 @@
 #include "GKeyboard.h"
 #include <time.h>
 #include <iostream>
+#include <cmath>
 #include <string>
 #include <set>
 #ifdef WINDOWS
@@ -43,6 +46,7 @@
 #include <sstream>
 #include <fstream>
 #include <errno.h>
+#include <memory>
 
 using namespace GClasses;
 using std::cout;
@@ -106,10 +110,10 @@ UsageNode* makeCryptoUsageTree()
 		pDecrypt->add("[filename]", "The name of a file that was encrypted using the encrypt command.");
 	}
 	{
-		UsageNode* pDump = pRoot->add("dump [filename] [offset] [length]", "Print the specified portion of a file.");
+		pRoot->add("dump [filename] [offset] [length]", "Print the specified portion of a file.");
 	}
 	{
-		UsageNode* pFind = pRoot->add("find [filename] [needle]", "Print all the offsets where [needle] occurs in the specified file. (This could be used, for example, with /dev/sda* to scan an entire hard drive, including deleted files. After you find what you want, it is typical to use \"dump\" to retrieve the region around it.)");
+		pRoot->add("find [filename] [needle]", "Print all the offsets where [needle] occurs in the specified file. (This could be used, for example, with /dev/sda* to scan an entire hard drive, including deleted files. After you find what you want, it is typical to use \"dump\" to retrieve the region around it.)");
 	}
 	{
 		UsageNode* pEncrypt = pRoot->add("encrypt [path] <options>", "Encrypt [path] to create a single encrypted archive file. (It will prompt you to enter a passphrase.)");
@@ -117,8 +121,6 @@ UsageNode* makeCryptoUsageTree()
 		UsageNode* pOpts = pEncrypt->add("<options>");
 		pOpts->add("-out [filename]", "Specify the name of the output file. (The default is to use the name of the path with the extension changed to .encrypted.)");
 		pOpts->add("-compress", "Take a lot longer, but produce a smaller encrypted archive file. (This feature really isn't very usable yet.)");
-	}
-	{
 	}
 	{
 		UsageNode* pLogKeys = pRoot->add("logkeys [filename] <options>", "Log key-strokes to the specified file. (The program will exit if the panic-sequence \"xqwertx\" is detected.)");
@@ -178,7 +180,7 @@ bool shredFile(const char* szFilename)
 bool shredFolder(const char* szPath)
 {
 	char* szOldDir = new char[300]; // use heap so deep recursion won't overflow stack
-	ArrayHolder<char> hOldDir(szOldDir);
+	std::unique_ptr<char[]> hOldDir(szOldDir);
 	if(!getcwd(szOldDir, 300))
 		throw Ex("Failed to read current dir");
 
@@ -398,7 +400,7 @@ int doBandwidthClient(GArgReader& args)
 
 	// Fill an 8-MB buffer with random data
 	unsigned char* pBuf = new unsigned char[MESSAGESIZE];
-	ArrayHolder<unsigned char> hBuf(pBuf);
+	std::unique_ptr<unsigned char[]> hBuf(pBuf);
 	GRand r(0);
 	unsigned int* pU = (unsigned int*)pBuf;
 	for(unsigned int i = 0; i < MESSAGESIZE / sizeof(unsigned int); i++)
@@ -564,8 +566,8 @@ void dictionaryAttackNTPassword(unsigned char* hash, vector<vector<string>* >& d
 			pos += separator.length();
 
 			// Add the next word
-			vector<string>& dict = *dictionaries[i];
-			string& word = dict[indexes[i]];
+			vector<string>& dict2 = *dictionaries[i];
+			string& word = dict2[indexes[i]];
 			memcpy(buf + pos, word.c_str(), word.length());
 			pos += word.length();
 		}
@@ -921,7 +923,7 @@ void dump(GArgReader& args)
 		length = 0;
 	size_t bufSize = std::min((size_t)8192, length);
 	char* pBuf = new char[bufSize + 1];
-	ArrayHolder<char> hBuf(pBuf);
+	std::unique_ptr<char[]> hBuf(pBuf);
 	while(length > 0)
 	{
 		size_t blockLen = std::min(length, bufSize);
@@ -939,6 +941,375 @@ void dump(GArgReader& args)
 		cout << pBuf;
 		length -= blockLen;
 	}
+}
+
+#define MAX_PASSPHRASE_LEN 1024
+#define SALT_LEN 32
+
+/// Assumes salt of length SALT_LEN has already been concatenated to passphrase
+void encryptPath(const char* pathName, char* passphrase, const char* targetName, bool compress)
+{
+	// Encrypt the path
+	GFolderSerializer fs(pathName, compress);
+	GCrypto crypto(passphrase, strlen(passphrase));
+	std::ofstream ofs;
+	ofs.exceptions(std::ios::failbit|std::ios::badbit);
+	ofs.open(targetName, std::ios::binary);
+
+	// Write the salt
+	ofs.write(passphrase + strlen(passphrase) - SALT_LEN, SALT_LEN);
+
+	size_t prevProg = 0;
+	while(true)
+	{
+		size_t len;
+		char* chunk = fs.next(&len);
+		if(!chunk)
+			break;
+		crypto.doChunk(chunk, len);
+		try
+		{
+			ofs.write(chunk, len);
+			size_t prog = fs.bytesOut();
+			if(prog >= prevProg + 100000)
+			{
+				cout << "          \r" << 0.01 * floor((float)prog * 0.0001) << "MB";
+				cout.flush();
+			}
+		}
+		catch(const std::exception&)
+		{
+			throw Ex("Error writing to file ", targetName);
+		}
+	}
+	cout << "\rDone.               \n";
+}
+
+void appendSalt(char* passphrase, const char* salt)
+{
+	size_t len = strlen(passphrase);
+	size_t sl = std::min((unsigned int)(MAX_PASSPHRASE_LEN - 1 - len), (unsigned int)SALT_LEN);
+	memcpy(passphrase + len, salt, sl);
+	passphrase[len + sl] = '\0';
+}
+
+#define DECRYPT_BLOCK_SIZE 2048
+
+void decryptFile(const char* source, char* passphrase, char* outSalt, std::string* pBaseName)
+{
+	// Open the file and measure its length
+	std::ifstream ifs;
+	ifs.exceptions(std::ios::failbit|std::ios::badbit);
+	ifs.open(source, std::ios::binary);
+	ifs.seekg(0, std::ios::end);
+	size_t len = (size_t)ifs.tellg();
+	ifs.seekg(0, std::ios::beg);
+
+	// Read the salt
+	ifs.read(outSalt, SALT_LEN);
+	len -= SALT_LEN;
+	appendSalt(passphrase, outSalt);
+
+	// Decrypt it
+	size_t origLen = len;
+	size_t prevLen = len;
+	GFolderDeserializer fd(pBaseName);
+	GCrypto crypto(passphrase, strlen(passphrase));
+	char* pBuf = new char[DECRYPT_BLOCK_SIZE];
+	std::unique_ptr<char[]> hBuf(pBuf);
+	bool first = true;
+	while(len > 0)
+	{
+		size_t chunkSize = std::min(len, (size_t)DECRYPT_BLOCK_SIZE);
+		ifs.read(pBuf, chunkSize);
+		len -= chunkSize;
+		crypto.doChunk(pBuf, chunkSize);
+		if(first)
+		{
+			first = false;
+			if(memcmp(pBuf, "ugfs", 4) != 0 && memcmp(pBuf, "cgfs", 4) != 0)
+				throw Ex("The passphrase is incorrect");
+		}
+		fd.doNext(pBuf, chunkSize);
+		if(prevLen - len >= 10000)
+		{
+			cout << "      \r" << (0.01 * floor(float(origLen - len) * 10000 / origLen)) << "%";
+			cout.flush();
+			prevLen = len;
+		}
+	}
+	cout << "\rDone.          \n";
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class FastConnection : public GDynamicPageConnection
+{
+public:
+	FastConnection(SOCKET sock, GDynamicPageServer* pServer) : GDynamicPageConnection(sock, pServer)
+	{
+	}
+	
+	virtual ~FastConnection()
+	{
+	}
+
+	virtual void handleRequest(GDynamicPageSession* pSession, std::ostream& response);
+
+};
+
+class FastServer : public GDynamicPageServer
+{
+public:
+	std::string m_basePath;
+
+	FastServer(int port, GRand* pRand) : GDynamicPageServer(port, pRand) {}
+	virtual ~FastServer() {}
+	virtual void onEverySixHours() {}
+	virtual void onStateChange() {}
+	virtual void onShutDown() {}
+
+	virtual GDynamicPageConnection* makeConnection(SOCKET sock)
+	{
+		return new FastConnection(sock, this);
+	}
+};
+
+// virtual
+void FastConnection::handleRequest(GDynamicPageSession* pSession, std::ostream& response)
+{
+	if(strcmp(m_szUrl, "/favicon.ico") == 0)
+		return;
+	GHttpParamParser parser(this->m_szParams);
+	response << "<html><head>\n";
+	response << "	<title>The Fasting Enforcer</title>\n";
+	response << "</head><body>\n";
+	const char* filename = parser.find("filename");
+	if(filename)
+	{
+		time_t tNow = time(0);
+		struct tm dest;
+		localtime_r(&tNow, &dest);
+		const char* szYear = parser.find("year");
+		const char* szMonth = parser.find("month");
+		const char* szDay = parser.find("day");
+		const char* szHour = parser.find("hour");
+		const char* szMinute = parser.find("minute");
+		const char* szServer = parser.find("server");
+		const char* szName = parser.find("uid");
+		if(!szYear || !szMonth || !szDay || !szHour || !szMinute || !szServer || !szName)
+		{
+			response << "Missing parameter. I am not going to lock it.";
+		}
+		else
+		{
+			dest.tm_year = atoi(szYear) - 1900;
+			dest.tm_mon = atoi(szMonth) - 1;
+			dest.tm_mday = atoi(szDay);
+			dest.tm_hour = atoi(szHour);
+			dest.tm_min = atoi(szMinute);
+			time_t destTime = mktime(&dest);
+			double duration = destTime - tNow;
+			if(duration < 0)
+			{
+				response << "That is in the past. I am not going to lock it.";
+			}
+			else if(duration > 90 * 24 * 60 * 60)
+			{
+				response << "That would be more than 90 days! I am going to assume it was an error and not lock it.";
+			}
+			else
+			{
+				// Measure the clock skew
+				const char* szpretime = "name=\"date\" value=\"";
+				size_t resp1Size;
+				unsigned char* pResp1 = downloadFromWeb(szServer, 60, &resp1Size);
+				std::unique_ptr<unsigned char[]> hResp1(pResp1);
+				char* pServerTime = strstr((char*)pResp1, szpretime);
+				size_t servertime = atol(pServerTime + strlen(szpretime));
+				time_t timenow = time(NULL);
+				ssize_t skew = (ssize_t)servertime - (ssize_t)timenow;
+				cout << "Clock skew: " << to_str(skew) << "\n";
+
+				// Generate a password
+				char pw[33 + SALT_LEN];
+				GRand rand(getpid() * time(NULL));
+				for(size_t i = 0; i < 32 + SALT_LEN; i++)
+					pw[i] = 'a' + rand.next(26);
+				pw[32] = '\0';
+
+				// Notify the server
+				size_t responseSize;
+				string query = szServer;
+				query += "?put=";
+				query += szName;
+				query += "&value=";
+				query += pw;
+				query += "&date=";
+				query += to_str(timenow + duration + skew);
+				unsigned char* pResponse = downloadFromWeb(query.c_str(), 60, &responseSize);
+				std::unique_ptr<unsigned char[]> hResponse(pResponse);
+				char* pUntil = strstr((char*)pResponse, "until ");
+				if(!pUntil)
+					throw Ex("Unexpected response from server: ", (char*)pResponse);
+
+				// Encrypt the path
+				string s = filename;
+				s += ".encrypted";
+				encryptPath(filename, pw, s.c_str(), false);
+				if(unlink(filename) != 0)
+					throw Ex("Error deleting the file ", filename);
+
+				response << "<h2>The file has been locked</h2>\n";
+				response << "Have a nice day!";
+				m_pServer->shutDown();
+			}
+		}
+	}
+	else
+	{
+		response << "<h2>The Fasting Enforcer</h2>\n";
+		char cwdbuf[256];
+		const char* cwd = getcwd(cwdbuf, 256);
+		response << "<table>\n";
+		char timebuf[256];
+		const char* curTime = GTime::asciiTime(timebuf, 256);
+		response << "<tr><td align=right>Time:</td><td>" << curTime << "</tr>\n";
+		response << "<tr><td>Current folder:</td><td>" << cwd << "</td></tr>\n";
+		response << "<tr><td valign=top align=right>Files:</td><td>";
+		vector<string> files;
+		GFile::fileList(files);
+		string def;
+		for(size_t i = 0; i < files.size(); i++) {
+			PathData pd;
+			GFile::parsePath(files[i].c_str(), &pd);
+			if(def.length() == 0 || strcmp(files[i].c_str()+ pd.extStart, ".exe") == 0)
+				def = files[i];
+			response << files[i] << "<br>\n";
+		}
+		time_t tnow = time(0);
+		struct tm* cur_time = localtime(&tnow);
+
+		response << "</td></tr>\n";
+		response << "</table><br><br>\n";
+		response << "<form method=\"get\"><table>\n";
+		response << "<tr><td align=right>Lock the file</td><td><input type=\"string\" name=\"filename\" size=\"100\" value=\"" << def << "\"></td></tr>\n";
+		response << "<tr><td align=right>Until</td><td>";
+		response << " Year:<input type=\"string\" name=\"year\" size=\"4\" value=\"" << to_str(cur_time->tm_year + 1900) << "\">";
+		response << " Month:<input type=\"string\" name=\"month\" size=\"3\" value=\"" << to_str(cur_time->tm_mon + 1) << "\">";
+		response << " Day:<input type=\"string\" name=\"day\" size=\"3\" value=\"" << to_str(cur_time->tm_mday) << "\">";
+		response << " Hour:<input type=\"string\" name=\"hour\" size=\"3\" value=\"" << to_str(cur_time->tm_hour) << "\">";
+		response << " Minute:<input type=\"string\" name=\"minute\" size=\"3\" value=\"0\"></td></tr>\n";
+		response << "<tr><td></td><td><input type=\"hidden\" name=\"server\" value=\"uaf46365.ddns.uark.edu/escrow/escrow.php\">\n";
+		response << "<input type=\"hidden\" name=\"uid\" value=\"lol\">\n";
+		response << "<input type=\"submit\" value=\"Lock\"></td></tr>\n";
+		response << "</table></form>\n";
+
+	}
+	response << "</body></html>\n";
+}
+
+void fast(GArgReader& args)
+{
+	GRand rand(0);
+	FastServer server(8983, &rand);
+	GApp::openUrlInBrowser(server.myAddress());
+	server.go();
+}
+
+
+
+
+
+void feast(GArgReader& args)
+{
+	string def;
+	const char* szServer = "uaf46365.ddns.uark.edu/escrow/escrow.php";
+	const char* szName = "lol";
+	while(args.next_is_flag())
+	{
+		if(args.if_pop("-file"))
+			def = args.pop_string();
+		else if(args.if_pop("-server"))
+			szServer = args.pop_string();
+		else if(args.if_pop("-uid"))
+			szName = args.pop_string();
+		else
+			throw Ex("Invalid option: ", args.peek());
+	}
+	if(def.length() == 0)
+	{
+		vector<string> files;
+		GFile::fileList(files);
+		for(size_t i = 0; i < files.size(); i++) {
+			PathData pd;
+			GFile::parsePath(files[i].c_str(), &pd);
+			if(strcmp(files[i].c_str()+ pd.extStart, ".encrypted") == 0)
+				def = files[i];
+		}
+	}
+	if(def.length() == 0)
+	{
+		char cwdbuf[256];
+		const char* cwd = getcwd(cwdbuf, 256);
+		throw Ex("No encrypted files were found in ", cwd);
+	}
+	const char* pathName = def.c_str();
+
+	// Notify the server
+	size_t responseSize;
+	string query = szServer;
+	query += "?get=";
+	query += szName;
+	unsigned char* pResponse = downloadFromWeb(query.c_str(), 60, &responseSize);
+	std::unique_ptr<unsigned char[]> hResponse(pResponse);
+	char* pUntil = strstr((char*)pResponse, "until ");
+	if(pUntil)
+	{
+		cout << pResponse << "\n\n";
+		return;
+	}
+
+	// Decrypt
+	char passphrase[MAX_PASSPHRASE_LEN];
+	strcpy(passphrase, (char*)pResponse);
+	string basename;
+	char salt[SALT_LEN];
+	salt[0] = '\0';
+	decryptFile(pathName, passphrase, salt, &basename);
+	if(unlink(pathName) != 0)
+		throw Ex("Error deleting the file ", pathName);
 }
 
 void find(GArgReader& args)
@@ -967,7 +1338,7 @@ void find(GArgReader& args)
 		throw Ex("big needle");
 	size_t bufSize = bulkSize + needleLen;
 	char* pBuf = new char[bufSize + 1];
-	ArrayHolder<char> hBuf(pBuf);
+	std::unique_ptr<char[]> hBuf(pBuf);
 	size_t overflow = 0;
 	size_t pos = 0;
 	while(fileSize > 0)
@@ -1110,31 +1481,13 @@ public:
 
 
 
-unsigned char* downloadFromWeb(const char* szAddr, size_t timeout, size_t* pOutSize)
-{
-	GHttpClient client;
-	if(!client.sendGetRequest(szAddr))
-		throw Ex("Error connecting");
-	float fProgress;
-	time_t start = time(NULL);
-	while(client.status(&fProgress) == GHttpClient::Downloading)
-	{
-		if((size_t)(time(NULL) - start) > timeout)
-			break;
-		GThread::sleep(50);
-	}
-	if(client.status(&fProgress) != GHttpClient::Done)
-		throw Ex("Error downloading page");
-	return client.releaseData(pOutSize);
-}
-
 int wget(GArgReader& args)
 {
 	const char* url = args.pop_string();
 	const char* filename = args.pop_string();
 	size_t size;
 	char* pFile = (char*)downloadFromWeb(url, 20, &size);
-	ArrayHolder<char> hFile(pFile);
+	std::unique_ptr<char[]> hFile(pFile);
 	GFile::saveFile(pFile, size, filename);
 	return 0;
 }
@@ -1182,9 +1535,6 @@ int doLogin(GArgReader& args)
 }
 */
 
-#define MAX_PASSPHRASE_LEN 1024
-#define SALT_LEN 32
-
 void readInPassphrase(char* pBuf, size_t len, char* pSalt = NULL)
 {
 	cout << "Please enter the passphrase: ";
@@ -1215,12 +1565,12 @@ void readInPassphrase(char* pBuf, size_t len, char* pSalt = NULL)
 	if(pSalt)
 	{
 		size_t remaining = SALT_LEN;
-		cout << "\rPlease enter " << remaining << " chars of salt";
+		cout << "\rPlease enter " << remaining << " chars of throw-away salt";
 		cout.flush();
-		GPassiveConsole pc(false);
+		GPassiveConsole pc2(false);
 		while(remaining > 0)
 		{
-			char c = pc.getChar();
+			char c = pc2.getChar();
 			if(c != '\0')
 			{
 				remaining--;
@@ -1234,62 +1584,6 @@ void readInPassphrase(char* pBuf, size_t len, char* pSalt = NULL)
 		cout << "\r                                                   \r";
 		cout.flush();
 	}
-}
-
-void appendSalt(char* passphrase, const char* salt)
-{
-	size_t len = strlen(passphrase);
-	size_t sl = std::min((unsigned int)(MAX_PASSPHRASE_LEN - 1 - len), (unsigned int)SALT_LEN);
-	memcpy(passphrase + len, salt, sl);
-	passphrase[len + sl] = '\0';
-}
-
-#define DECRYPT_BLOCK_SIZE 2048
-
-void decryptFile(const char* source, char* passphrase, char* outSalt, std::string* pBaseName)
-{
-	// Open the file and measure its length
-	std::ifstream ifs;
-	ifs.exceptions(std::ios::failbit|std::ios::badbit);
-	ifs.open(source, std::ios::binary);
-	ifs.seekg(0, std::ios::end);
-	size_t len = (size_t)ifs.tellg();
-	ifs.seekg(0, std::ios::beg);
-
-	// Read the salt
-	ifs.read(outSalt, SALT_LEN);
-	len -= SALT_LEN;
-	appendSalt(passphrase, outSalt);
-
-	// Decrypt it
-	size_t origLen = len;
-	size_t prevLen = len;
-	GFolderDeserializer fd(pBaseName);
-	GCrypto crypto(passphrase, strlen(passphrase));
-	char* pBuf = new char[DECRYPT_BLOCK_SIZE];
-	ArrayHolder<char> hBuf(pBuf);
-	bool first = true;
-	while(len > 0)
-	{
-		size_t chunkSize = std::min(len, (size_t)DECRYPT_BLOCK_SIZE);
-		ifs.read(pBuf, chunkSize);
-		len -= chunkSize;
-		crypto.doChunk(pBuf, chunkSize);
-		if(first)
-		{
-			first = false;
-			if(memcmp(pBuf, "ugfs", 4) != 0 && memcmp(pBuf, "cgfs", 4) != 0)
-				throw Ex("The passphrase is incorrect");
-		}
-		fd.doNext(pBuf, chunkSize);
-		if(prevLen - len >= 10000)
-		{
-			cout << "      \r" << (0.01 * floor(float(origLen - len) * 10000 / origLen)) << "%";
-			cout.flush();
-			prevLen = len;
-		}
-	}
-	cout << "\rDone.          \n";
 }
 
 class PassphraseWiper
@@ -1311,44 +1605,6 @@ void decrypt(GArgReader& args)
 	PassphraseWiper pw(passphrase);
 	char salt[SALT_LEN];
 	decryptFile(filename, passphrase, salt, NULL);
-}
-
-void encryptPath(const char* pathName, char* passphrase, const char* targetName, bool compress)
-{
-	// Encrypt the path
-	GFolderSerializer fs(pathName, compress);
-	GCrypto crypto(passphrase, strlen(passphrase));
-	std::ofstream ofs;
-	ofs.exceptions(std::ios::failbit|std::ios::badbit);
-	ofs.open(targetName, std::ios::binary);
-
-	// Write the salt
-	ofs.write(passphrase + strlen(passphrase) - SALT_LEN, SALT_LEN);
-
-	size_t prevProg = 0;
-	while(true)
-	{
-		size_t len;
-		char* chunk = fs.next(&len);
-		if(!chunk)
-			break;
-		crypto.doChunk(chunk, len);
-		try
-		{
-			ofs.write(chunk, len);
-			size_t prog = fs.bytesOut();
-			if(prog >= prevProg + 100000)
-			{
-				cout << "          \r" << 0.01 * floor((float)prog * 0.0001) << "MB";
-				cout.flush();
-			}
-		}
-		catch(const std::exception&)
-		{
-			throw Ex("Error writing to file ", targetName);
-		}
-	}
-	cout << "\rDone.               \n";
 }
 
 void encrypt(GArgReader& args)
@@ -1543,8 +1799,8 @@ void open(GArgReader& args)
 		//cout << "	l) Leave the files decrypted. (Never choose this option.)\n";
 		cout << "Enter your choice (q or s)? ";
 		cout.flush();
-		char choice[2];
-		cin.getline(choice, 2);
+		char choice[1024];
+		cin.getline(choice, 1023);
 		if(_stricmp(choice, "q") == 0)
 		{
 			shred(basename.c_str());
@@ -1580,7 +1836,7 @@ void open(GArgReader& args)
 		}
 		else if(_stricmp(choice, "l") == 0)
 			break;
-		cout << "\n\nInvalid choice.\n\n";
+		cout << "\n\nInvalid choice: \"" << choice << "\".\n\n";
 	}
 }
 
@@ -1606,6 +1862,54 @@ void grep(GArgReader& args)
 	}
 	shred(basename.c_str());
 }
+/*
+void socketClient(GArgReader& args)
+{
+	const char* szAddr;
+	int port = 8080;
+	while(args.next_is_flag())
+	{
+		if(args.if_pop("-port"))
+			port = (int)args.pop_uint();
+		else if(args.if_pop("-addr"))
+			szAddr = args.pop_string();
+		else
+			throw Ex("Invalid option: ", args.peek());
+	}
+	
+	GTCPClient client;
+	client.connect(szAddr, port);
+	while(true)
+	{
+		
+	}
+}
+*/
+void socketServer(GArgReader& args)
+{
+	int port = 8080;
+	while(args.next_is_flag())
+	{
+		if(args.if_pop("-port"))
+			port = (int)args.pop_uint();
+		else
+			throw Ex("Invalid option: ", args.peek());
+	}
+
+	GTCPServer server(port);
+	char buf[257];
+	GTCPConnection* pConn;
+	while(true)
+	{
+		size_t n = server.receive(buf, 256, &pConn);
+		if(n > 0)
+		{
+			buf[n] = '\0';
+			std::cout << buf;
+		}
+		GThread::sleep(100);
+	}
+}
 
 void ShowUsage()
 {
@@ -1614,7 +1918,7 @@ void ShowUsage()
 	cout << "<Angled brackets> are used to indicate optional arguments.\n";
 	cout << "\n";
 	UsageNode* pUsageTree = makeCryptoUsageTree();
-	Holder<UsageNode> hUsageTree(pUsageTree);
+	std::unique_ptr<UsageNode> hUsageTree(pUsageTree);
 	pUsageTree->print(cout, 0, 3, 76, 1000, true);
 	cout.flush();
 }
@@ -1626,7 +1930,7 @@ void showError(GArgReader& args, const char* szMessage)
 	args.set_pos(1);
 	const char* szCommand = args.peek();
 	UsageNode* pUsageTree = makeCryptoUsageTree();
-	Holder<UsageNode> hUsageTree(pUsageTree);
+	std::unique_ptr<UsageNode> hUsageTree(pUsageTree);
 	if(szCommand)
 	{
 		UsageNode* pUsageCommand = pUsageTree->choice(szCommand);
@@ -1660,8 +1964,11 @@ void doit(GArgReader& args)
 	else if(args.if_pop("bandwidthserver")) doBandwidthServer(args);
 	//else if(args.if_pop("li")) doLogin(args);
 	else if(args.if_pop("bruteforcentpassword")) bruteForceNTPassword(args);
+	else if(args.if_pop("findbrokenlinks")) findbrokenlinks(args);
 	else if(args.if_pop("dictattackntpassword")) dictAttackNTPassword(args);
 	else if(args.if_pop("dump")) dump(args);
+	else if(args.if_pop("fast")) fast(args);
+	else if(args.if_pop("feast")) feast(args);
 	else if(args.if_pop("find")) find(args);
 	else if(args.if_pop("commandcenter")) doCommandCenter(args);
 	else if(args.if_pop("decrypt")) decrypt(args);
@@ -1672,6 +1979,8 @@ void doit(GArgReader& args)
 	else if(args.if_pop("open")) open(args);
 	else if(args.if_pop("grep")) grep(args);
 	else if(args.if_pop("satellite")) doSatellite(args);
+	//else if(args.if_pop("socketclient")) socketClient(args);
+	else if(args.if_pop("socketserver")) socketServer(args);
 	else if(args.if_pop("shred")) shred(args);
 	else if(args.if_pop("wget")) wget(args);
 	else throw Ex("Unrecognized command: ", args.peek());

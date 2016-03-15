@@ -48,9 +48,9 @@ This switch statement just tells it to execute the tool that is specified by the
 	void Transpose(GArgReader& args)
 	{
 		GMatrix* pData = loadData(args.pop_string());
-		Holder&lt;GMatrix&gt; hData(pData);
+		std::unique_ptr&lt;GMatrix&gt; hData(pData);
 		GMatrix* pTransposed = pData->transpose();
-		Holder&lt;GMatrix&gt; hTransposed(pTransposed);
+		std::unique_ptr&lt;GMatrix&gt; hTransposed(pTransposed);
 		pTransposed->print(cout);
 	}
 </pre>
@@ -88,9 +88,5 @@ Finally, don't forget to push your changes into our Git repository. You want the
 
 <br><br><a href="../index.html#toc">Back to the table of contents</a><br>
 </td></tr></table>
-<center><br><br><br>
-Hosting for this project generously provided by:<br>
-<a href="http://sourceforge.net"><img src="http://sourceforge.net/sflogo.php?group_id=153538&amp;type=3" width="125" height="37" border="0" alt="SourceForge.net Logo" /></a>
-</center>
 </td></tr></table><br><br><br><br><br>
 </body></html>

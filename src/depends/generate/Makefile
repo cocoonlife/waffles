@@ -19,11 +19,11 @@ endif
 # Set platform-specific compiler and linker flags
 ifeq ($(UNAME),Darwin)
 	DARWIN_BASE ?= /usr/X11
-	CFLAGS = -I/opt/local/include -I/usr/local/include -D_THREAD_SAFE -DDARWIN -I$(DARWIN_BASE)/include -no-cpp-precomp
-	DBG_LFLAGS = -L/opt/local/lib -L/usr/local/lib -lpng -lz -framework AppKit ../../../lib/libGClassesDbg.a -lpthread
-	OPT_LFLAGS = -L/opt/local/lib -L/usr/local/lib -lpng -lz -framework AppKit ../../../lib/libGClasses.a -lpthread
+	CFLAGS = -Wshadow -std=c++11 -stdlib=libc++ -I/opt/local/include -I/usr/local/include -D_THREAD_SAFE -DDARWIN -I$(DARWIN_BASE)/include -no-cpp-precomp
+	DBG_LFLAGS = -stdlib=libc++ -L/opt/local/lib -L/usr/local/lib -lpng -lz -framework AppKit ../../../lib/libGClassesDbg.a -lpthread
+	OPT_LFLAGS = -stdlib=libc++ -L/opt/local/lib -L/usr/local/lib -lpng -lz -framework AppKit ../../../lib/libGClasses.a -lpthread
 else
-	CFLAGS = -Wall
+	CFLAGS = -Wall -Werror -Wshadow -pedantic -std=c++11
 	DBG_LFLAGS = ../../../lib/libGClassesDbg.a -lpng -lpthread
 	OPT_LFLAGS = ../../../lib/libGClasses.a -lpng -lpthread
 endif

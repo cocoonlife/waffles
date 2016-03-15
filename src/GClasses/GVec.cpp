@@ -40,26 +40,463 @@ namespace GClasses {
 using std::vector;
 
 GVec::GVec(size_t n)
+: m_size(n)
 {
-	if(n > 0)
-		v = new double[n];
+	if(n == 0)
+		m_data = NULL;
 	else
-		v = NULL;
+		m_data = new double[n];
+}
+
+GVec::GVec(int n)
+: m_size(n)
+{
+	if(n == 0)
+		m_data = NULL;
+	else
+		m_data = new double[n];
+}
+
+GVec::GVec(double d)
+{
+	throw Ex("Calling this method is an error");
+}
+
+GVec::GVec(GDomNode* pNode)
+: m_data(NULL), m_size(0)
+{
+	deserialize(pNode);
+}
+
+GVec::GVec(const GVec& orig)
+{
+	m_size = orig.m_size;
+	if(m_size == 0)
+		m_data = NULL;
+	else
+	{
+		m_data = new double[m_size];
+		for(size_t i = 0; i < m_size; i++)
+			m_data[i] = orig.m_data[i];
+	}
 }
 
 GVec::~GVec()
 {
-	delete[] v;
+	delete[] m_data;
+}
+
+GVec& GVec::operator=(const GVec& orig)
+{
+	resize(orig.m_size);
+	for(size_t i = 0; i < m_size; i++)
+		m_data[i] = orig.m_data[i];
+	return *this;
+}
+
+void GVec::copy(const GVec& orig)
+{
+	resize(orig.m_size);
+	for(size_t i = 0; i < m_size; i++)
+		m_data[i] = orig.m_data[i];
 }
 
 void GVec::resize(size_t n)
 {
-	delete[] v;
-	if(n > 0)
-		v = new double[n];
+	if(m_size == n)
+		return;
+	delete[] m_data;
+	m_size = n;
+	if(n == 0)
+		m_data = NULL;
 	else
-		v = NULL;
+		m_data = new double[n];
 }
+
+void GVec::fill(const double val, size_t startPos, size_t endPos)
+{
+	endPos = std::min(endPos, m_size);
+	for(size_t i = startPos; i < endPos; i++)
+		m_data[i] = val;
+}
+
+GVec GVec::operator+(const GVec& that) const
+{
+	GAssert(size() == that.size());
+	GVec v(m_size);
+	for(size_t i = 0; i < m_size; i++)
+		v[i] = (*this)[i] + that[i];
+	return v;
+}
+
+GVec& GVec::operator+=(const GVec& that)
+{
+	GAssert(size() == that.size());
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] += that[i];
+	return *this;
+}
+
+GVec GVec::operator-(const GVec& that) const
+{
+	GAssert(size() == that.size());
+	GVec v(m_size);
+	for(size_t i = 0; i < m_size; i++)
+		v[i] = (*this)[i] - that[i];
+	return v;
+}
+
+GVec& GVec::operator-=(const GVec& that)
+{
+	GAssert(size() == that.size());
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] -= that[i];
+	return *this;
+}
+
+GVec GVec::operator*(double scalar) const
+{
+	GVec v(m_size);
+	for(size_t i = 0; i < m_size; i++)
+		v[i] = (*this)[i] * scalar;
+	return v;
+}
+
+GVec& GVec::operator*=(double scalar)
+{
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] *= scalar;
+	return *this;
+}
+
+void GVec::set(const double* pSource, size_t n)
+{
+	resize(n);
+	for(size_t i = 0; i < n; i++)
+		(*this)[i] = *(pSource++);
+}
+
+double GVec::squaredMagnitude() const
+{
+	double s = 0.0;
+	for(size_t i = 0; i < m_size; i++)
+	{
+		double d = (*this)[i];
+		s += (d * d);
+	}
+	return s;
+}
+
+void GVec::normalize()
+{
+	double mag = std::sqrt(squaredMagnitude());
+	if(mag < 1e-16)
+		fill(std::sqrt(1.0 / m_size));
+	else
+		(*this) *= (1.0 / mag);
+}
+
+void GVec::sumToOne()
+{
+	double s = sum();
+	if(s < 1e-16)
+		fill(1.0 / m_size);
+	else
+		(*this) *= (1.0 / s);
+}
+
+double GVec::squaredDistance(const GVec& that) const
+{
+	GAssert(size() == that.size());
+	double s = 0.0;
+	for(size_t i = 0; i < m_size; i++)
+	{
+		double d = (*this)[i] - that[i];
+		s += (d * d);
+	}
+	return s;
+}
+
+void GVec::fillUniform(GRand& rand, double min, double max)
+{
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] = rand.uniform() * (max - min) + min;
+}
+
+void GVec::fillNormal(GRand& rand, double deviation)
+{
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] = rand.normal() * deviation;
+}
+
+void GVec::fillSphericalShell(GRand& rand, double radius)
+{
+	fillNormal(rand);
+	normalize();
+	if(radius != 1.0)
+		(*this) *= radius;
+}
+
+void GVec::fillSphericalVolume(GRand& rand)
+{
+	fillSphericalShell(rand);
+	(*this) *= std::pow(rand.uniform(), 1.0 / m_size);
+}
+
+void GVec::fillSimplex(GRand& rand)
+{
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] = rand.exponential();
+	(*this) *= (1.0 / sum());
+}
+
+void GVec::print(std::ostream& stream) const
+{
+	stream << "[";
+	if(m_size > 0)
+		stream << to_str((*this)[0]);
+	for(size_t i = 1; i < m_size; i++)
+		stream << "," << to_str((*this)[i]);
+	stream << "]";
+}
+
+double GVec::sum() const
+{
+	double s = 0.0;
+	for(size_t i = 0; i < m_size; i++)
+		s += (*this)[i];
+	return s;
+}
+
+size_t GVec::indexOfMax(size_t startPos, size_t endPos) const
+{
+	endPos = std::min(m_size, endPos);
+	size_t maxIndex = startPos;
+	double maxValue = -1e300;
+	for(size_t i = startPos; i < endPos; i++)
+	{
+		if((*this)[i] > maxValue)
+		{
+			maxIndex = i;
+			maxValue = (*this)[i];
+		}
+	}
+	return maxIndex;
+}
+
+GDomNode* GVec::serialize(GDom* pDoc) const
+{
+	GDomNode* pNode = pDoc->newList();
+	for(size_t i = 0; i < m_size; i++)
+		pNode->addItem(pDoc, pDoc->newDouble((*this)[i]));
+	return pNode;
+}
+
+void GVec::deserialize(const GDomNode* pNode)
+{
+	GDomListIterator it(pNode);
+	resize(it.remaining());
+	for(size_t i = 0; it.current(); i++)
+	{
+		(*this)[i] = it.current()->asDouble();
+		it.advance();
+	}
+}
+
+double GVec::dotProduct(const GVec& that) const
+{
+	GAssert(size() == that.size());
+	double s = 0.0;
+	for(size_t i = 0; i < m_size; i++)
+		s += ((*this)[i] * that[i]);
+	return s;
+}
+
+double GVec::dotProductIgnoringUnknowns(const GVec& that) const
+{
+	GAssert(size() == that.size());
+	double s = 0.0;
+	for(size_t i = 0; i < m_size; i++)
+	{
+		if((*this)[i] != UNKNOWN_REAL_VALUE && that[i] != UNKNOWN_REAL_VALUE)
+			s += ((*this)[i] * that[i]);
+	}
+	return s;
+}
+
+double GVec::estimateSquaredDistanceWithUnknowns(const GVec& that) const
+{
+	GAssert(size() == that.size());
+	double dist = 0;
+	double d;
+	size_t nMissing = 0;
+	for(size_t n = 0; n < m_size; n++)
+	{
+		if((*this)[n] == UNKNOWN_REAL_VALUE || that[n] == UNKNOWN_REAL_VALUE)
+			nMissing++;
+		else
+		{
+			d = (*this)[n] - that[n];
+			dist += (d * d);
+		}
+	}
+	if(nMissing >= m_size)
+		return 1e50; // we have no info, so let's make a wild guess
+	else
+		return dist * m_size / (m_size - nMissing);
+}
+
+void GVec::addScaled(double scalar, const GVec& that)
+{
+	GAssert(size() == that.size());
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] += (scalar * that[i]);
+}
+
+void GVec::regularize_L1(double amount)
+{
+	for(size_t i = 0; i < m_size; i++)
+	{
+		if((*this)[i] < 0.0)
+			(*this)[i] = std::min(0.0, (*this)[i] + amount);
+		else
+			(*this)[i] = std::max(0.0, (*this)[i] - amount);
+	}
+}
+
+void GVec::put(size_t pos, const GVec& that, size_t start, size_t length)
+{
+	if(length == (size_t)-1)
+		length = that.size() - start;
+	else if(start + length > that.size())
+		throw Ex("Input out of range. that size=", to_str(that.size()), ", start=", to_str(start), ", length=", to_str(length));
+	if(pos + length > m_size || start + length > that.m_size)
+		throw Ex("Out of range. this size=", to_str(m_size), ", pos=", to_str(pos), ", that size=", to_str(that.m_size));
+	for(size_t i = 0; i < length; i++)
+		(*this)[pos + i] = that[start + i];
+}
+
+void GVec::erase(size_t start, size_t count)
+{
+	if(start + count > m_size)
+		throw Ex("out of range");
+	size_t end = m_size - count;
+	for(size_t i = start; i < end; i++)
+		(*this)[i] = (*this)[i + count];
+	m_size -= count;
+}
+
+double GVec::correlation(const GVec& that) const
+{
+	double d = this->dotProduct(that);
+	if(d == 0.0)
+		return 0.0;
+	return d / (sqrt(this->squaredMagnitude() * that.squaredMagnitude()));
+}
+
+void GVec::clip(double min, double max)
+{
+	GAssert(max >= min);
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] = std::max(min, std::min(max, (*this)[i]));
+}
+
+void GVec::subtractComponent(const GVec& component)
+{
+	GAssert(size() == component.size());
+	double comp = dotProduct(component);
+	for(size_t i = 0; i < m_size; i++)
+		(*this)[i] -= component[i] * comp;
+}
+
+void GVec::toImage(GImage* pImage, int width, int height, int channels, double range) const
+{
+	if(size() != (size_t)width * (size_t)height * (size_t)channels)
+		throw Ex("Size mismatch");
+	pImage->setSize(width, height);
+	unsigned int* pix = pImage->pixels();
+	if(channels == 3)
+	{
+		size_t pos = 0;
+		for(int y = 0; y < height; y++)
+		{
+			for(int x = 0; x < width; x++)
+			{
+				int r = ClipChan((int)((*this)[pos++] * 256 / range));
+				int g = ClipChan((int)((*this)[pos++] * 256 / range));
+				int b = ClipChan((int)((*this)[pos++] * 256 / range));
+				*(pix++) = gARGB(0xff, r, g, b);
+			}
+		}
+	}
+	else if(channels == 1)
+	{
+		size_t pos = 0;
+		for(int y = 0; y < height; y++)
+		{
+			for(int x = 0; x < width; x++)
+			{
+				int v = ClipChan((int)((*this)[pos++] * 256 / range));
+				*(pix++) = gARGB(0xff, v, v, v);
+			}
+		}
+	}
+	else
+		throw Ex("unsupported value for channels");
+}
+
+void GVec::fromImage(GImage* pImage, int width, int height, int channels, double range)
+{
+	resize(width * height * channels);
+	unsigned int* pix = pImage->pixels();
+	if(channels == 3)
+	{
+		size_t pos = 0;
+		for(int y = 0; y < height; y++)
+		{
+			for(int x = 0; x < width; x++)
+			{
+				(*this)[pos++] = gRed(*pix) * range / 255;
+				(*this)[pos++] = gGreen(*pix) * range / 255;
+				(*this)[pos++] = gBlue(*pix) * range / 255;
+				pix++;
+			}
+		}
+	}
+	else if(channels == 1)
+	{
+		size_t pos = 0;
+		for(int y = 0; y < height; y++)
+		{
+			for(int x = 0; x < width; x++)
+			{
+				(*this)[pos++] = gGray(*pix) * range / MAX_GRAY_VALUE;
+				pix++;
+			}
+		}
+	}
+	else
+		throw Ex("unsupported value for channels");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -80,7 +517,7 @@ void GVec::copy(double* pDest, const double* pSource, size_t nDims)
 {
 	memcpy(pDest, pSource, sizeof(double) * nDims);
 }
-
+/*
 // static
 double GVec::dotProduct(const double* pA, const double* pB, size_t nSize)
 {
@@ -92,7 +529,7 @@ double GVec::dotProduct(const double* pA, const double* pB, size_t nSize)
 	}
 	return d;
 }
-
+*/
 // static
 double GVec::dotProductIgnoringUnknowns(const double* pA, const double* pB, size_t nSize)
 {
@@ -224,34 +661,6 @@ void GVec::lNormNormalize(double norm, double* pVector, size_t nSize)
 	double dMag = lNormMagnitude(norm, pVector, nSize);
 	for(size_t i = 0; i < nSize; i++)
 		pVector[i] /= dMag;
-}
-
-
-// static
-double GVec::correlation(const double* pA, const double* pB, size_t nDims)
-{
-	double dDotProd = dotProduct(pA, pB, nDims);
-	if(dDotProd == 0)
-		return 0;
-	return dDotProd / (sqrt(squaredMagnitude(pA, nDims) * squaredMagnitude(pB, nDims)));
-}
-
-// static
-double GVec::correlation(const double* pOriginA, const double* pTargetA, const double* pB, size_t nDims)
-{
-	double dDotProd = dotProduct(pOriginA, pTargetA, pB, nDims);
-	if(dDotProd == 0)
-		return 0;
-	return dDotProd / (sqrt(squaredDistance(pOriginA, pTargetA, nDims) * squaredMagnitude(pB, nDims)));
-}
-
-// static
-double GVec::correlation(const double* pOriginA, const double* pTargetA, const double* pOriginB, const double* pTargetB, size_t nDims)
-{
-	double dDotProd = dotProduct(pOriginA, pTargetA, pOriginB, pTargetB, nDims);
-	if(dDotProd == 0)
-		return 0;
-	return dDotProd / (sqrt(squaredDistance(pOriginA, pTargetA, nDims) * squaredDistance(pOriginB, pTargetB, nDims)));
 }
 
 // static
@@ -410,9 +819,9 @@ void GVec::regularize_1_5(double* pVector, double amount, size_t nDims)
 	for(size_t i = 0; i < nDims; i++)
 	{
 		if(*pVector < 0.0)
-			*pVector += amount * sqrt(-*pVector);
+			*pVector = std::min(0.0, *pVector + amount * sqrt(-*pVector));
 		else
-			*pVector -= amount * sqrt(*pVector);
+			*pVector = std::max(0.0, *pVector - amount * sqrt(*pVector));
 		pVector++;
 	}
 }
@@ -423,9 +832,9 @@ void GVec::regularize_1(double* pVector, double amount, size_t nDims)
 	for(size_t i = 0; i < nDims; i++)
 	{
 		if(*pVector < 0.0)
-			*pVector += amount;
+			*pVector = std::min(0.0, *pVector + amount);
 		else
-			*pVector -= amount;
+			*pVector = std::max(0.0, *pVector - amount);
 		pVector++;
 	}
 }
@@ -488,7 +897,7 @@ void GVec::interpolateIndexes(size_t nIndexes, double* pInIndexes, double* pOutI
 		pOutIndexes[i] = ((float)1 - fWeight) * f0 + fWeight * f1;
 	}
 }
-
+/*
 void GVec::rotate(double* pVector, size_t nDims, double dAngle, const double* pA, const double* pB)
 {
 	// Check that the vectors are orthogonal
@@ -512,51 +921,11 @@ void GVec::rotate(double* pVector, size_t nDims, double dAngle, const double* pA
 	GVec::addScaled(pVector, x, pA, nDims);
 	GVec::addScaled(pVector, y, pB, nDims);
 }
-
+*/
 void GVec::perturb(double* pDest, double deviation, size_t dims, GRand& rand)
 {
 	for(size_t i = 0; i < dims; i++)
 		*(pDest++) += deviation * rand.normal();
-}
-
-void GVec::addInterpolatedFunction(double* pOut, size_t nOutVals, double* pIn, size_t nInVals)
-{
-	if(nInVals > nOutVals)
-	{
-		size_t inPos = 0;
-		size_t outPos, n, count;
-		double d;
-		for(outPos = 0; outPos < nOutVals; outPos++)
-		{
-			n = outPos * nInVals / nOutVals;
-			d = 0;
-			count = 0;
-			while(inPos <= n)
-			{
-				d += pIn[inPos++];
-				count++;
-			}
-			pOut[outPos] += d / count;
-		}
-	}
-	else if(nInVals < nOutVals)
-	{
-		double d;
-		size_t n, i, j;
-		for(n = 0; n < nOutVals; n++)
-		{
-			d = (double)n * nInVals / nOutVals;
-			i = (int)d;
-			j = std::min(i + 1, nInVals - 1);
-			d -= i;
-			pOut[n] += ((1.0 - d) * pIn[i] + d * pIn[j]);
-		}
-	}
-	else
-	{
-		for(size_t n = 0; n < nOutVals; n++)
-			pOut[n] += pIn[n];
-	}
 }
 
 // static
@@ -577,7 +946,7 @@ void GVec::deserialize(double* pVec, GDomListIterator& it)
 		it.advance();
 	}
 }
-
+/*
 // static
 void GVec::print(std::ostream& stream, int precision, const double* pVec, size_t dims)
 {
@@ -592,7 +961,7 @@ void GVec::print(std::ostream& stream, int precision, const double* pVec, size_t
 		stream << *pVec;
 		pVec++;
 	}
-}
+}*/
 
 void GVec::project(double* pDest, const double* pPoint, const double* pOrigin, const double* pBasis, size_t basisCount, size_t dims)
 {
@@ -601,29 +970,6 @@ void GVec::project(double* pDest, const double* pPoint, const double* pOrigin, c
 	{
 		GVec::addScaled(pDest, GVec::dotProduct(pOrigin, pPoint, pBasis, dims), pBasis, dims);
 		pBasis += dims;
-	}
-}
-
-void GVec::subtractComponent(double* pInOut, const double* pBasis, size_t dims)
-{
-	double component = dotProduct(pInOut, pBasis, dims);
-	for(size_t i = 0; i < dims; i++)
-	{
-		*pInOut -= *pBasis * component;
-		pBasis++;
-		pInOut++;
-	}
-}
-
-void GVec::subtractComponent(double* pInOut, const double* pOrigin, const double* pTarget, size_t dims)
-{
-	double component = dotProduct(pInOut, pOrigin, pTarget, dims) / squaredDistance(pOrigin, pTarget, dims);
-	for(size_t i = 0; i < dims; i++)
-	{
-		*pInOut -= (*pTarget - *pOrigin) * component;
-		pTarget++;
-		pOrigin++;
-		pInOut++;
 	}
 }
 
@@ -639,208 +985,14 @@ double GVec::sumElements(const double* pVec, size_t dims)
 	return sum;
 }
 
-double GVec::sumAbsoluteValues(const double* pVec, size_t dims)
-{
-	double sum = 0;
-	while(dims > 0)
-	{
-		sum += std::abs(*pVec);
-		pVec++;
-		dims--;
-	}
-	return sum;
-}
-
-
-void GVec_InsertionSort(double* pVec, size_t size, double* pParallel1, size_t* pParallel2, double* pParallel3)
-{
-	for(size_t i = 1; i < size; i++)
-	{
-		for(size_t j = i; j > 0; j--)
-		{
-			if(pVec[j] >= pVec[j - 1])
-				break;
-
-			// Swap
-			std::swap(pVec[j - 1], pVec[j]);
-			if(pParallel1)
-				std::swap(pParallel1[j - 1], pParallel1[j]);
-			if(pParallel2)
-				std::swap(pParallel2[j - 1], pParallel2[j]);
-		}
-	}
-}
-
 // static
-void GVec::smallestToFront(double* pVec, size_t k, size_t size, double* pParallel1, size_t* pParallel2, double* pParallel3)
-{
-	// Use insertion sort if the list is small
-	if(size < 7)
-	{
-		if(k < size)
-			GVec_InsertionSort(pVec, size, pParallel1, pParallel2, pParallel3);
-		return;
-	}
-	size_t beg = 0;
-	size_t end = size - 1;
-
-	// Pick a pivot (using the median of 3 technique)
-	double pivA = pVec[0];
-	double pivB = pVec[size / 2];
-	double pivC = pVec[size - 1];
-	double pivot;
-	if(pivA < pivB)
-	{
-		if(pivB < pivC)
-			pivot = pivB;
-		else if(pivA < pivC)
-			pivot = pivC;
-		else
-			pivot = pivA;
-	}
-	else
-	{
-		if(pivA < pivC)
-			pivot = pivA;
-		else if(pivB < pivC)
-			pivot = pivC;
-		else
-			pivot = pivB;
-	}
-
-	// Do Quick Sort
-	while(true)
-	{
-		while(beg < end && pVec[beg] < pivot)
-			beg++;
-		while(end > beg && pVec[end] > pivot)
-			end--;
-		if(beg >= end)
-			break;
-		std::swap(pVec[beg], pVec[end]);
-		if(pParallel1)
-			std::swap(pParallel1[beg], pParallel1[end]);
-		if(pParallel2)
-			std::swap(pParallel2[beg], pParallel2[end]);
-		if(pParallel3)
-			std::swap(pParallel3[beg], pParallel3[end]);
-		beg++;
-		end--;
-	}
-
-	// Recurse
-	if(pVec[beg] < pivot)
-		beg++;
-	if(k < beg)
-		GVec::smallestToFront(pVec, k, beg, pParallel1, pParallel2, pParallel3);
-	if(k > beg)
-		GVec::smallestToFront(pVec + beg, k - beg, size - beg, pParallel1 ? pParallel1 + beg : NULL, pParallel2 ? pParallel2 + beg : NULL, pParallel3 ? pParallel3 + beg : NULL);
-}
-
-// static
-double GVec::refinePoint(double* pPoint, double* pNeighbor, size_t dims, double distance, double learningRate, GRand* pRand)
-{
-	GTEMPBUF(double, buf, dims);
-	GVec::copy(buf, pPoint, dims);
-	GVec::subtract(buf, pNeighbor, dims);
-	double mag = squaredMagnitude(buf, dims);
-	GVec::safeNormalize(buf, dims, pRand);
-	GVec::multiply(buf, distance, dims);
-	GVec::add(buf, pNeighbor, dims);
-	GVec::subtract(buf, pPoint, dims);
-	GVec::multiply(buf, learningRate, dims);
-	GVec::add(pPoint, buf, dims);
-	return mag;
-}
-
-#ifndef MIN_PREDICT
-// static
-void GVec::toImage(const double* pVec, GImage* pImage, int width, int height, int channels, double range)
-{
-	pImage->setSize(width, height);
-	unsigned int* pix = pImage->pixels();
-	if(channels == 3)
-	{
-		for(int y = 0; y < height; y++)
-		{
-			for(int x = 0; x < width; x++)
-			{
-				int r = ClipChan((int)(*(pVec++) * 256 / range));
-				int g = ClipChan((int)(*(pVec++) * 256 / range));
-				int b = ClipChan((int)(*(pVec++) * 256 / range));
-				*(pix++) = gARGB(0xff, r, g, b);
-			}
-		}
-	}
-	else if(channels == 1)
-	{
-		for(int y = 0; y < height; y++)
-		{
-			for(int x = 0; x < width; x++)
-			{
-				int v = ClipChan((int)(*(pVec++) * 256 / range));
-				*(pix++) = gARGB(0xff, v, v, v);
-			}
-		}
-	}
-	else
-		throw Ex("unsupported value for channels");
-}
-
-// static
-void GVec::fromImage(GImage* pImage, double* pVec, int width, int height, int channels, double range)
-{
-	unsigned int* pix = pImage->pixels();
-	if(channels == 3)
-	{
-		for(int y = 0; y < height; y++)
-		{
-			for(int x = 0; x < width; x++)
-			{
-				*(pVec++) = gRed(*pix) * range / 255;
-				*(pVec++) = gGreen(*pix) * range / 255;
-				*(pVec++) = gBlue(*pix) * range / 255;
-				pix++;
-			}
-		}
-	}
-	else if(channels == 1)
-	{
-		for(int y = 0; y < height; y++)
-		{
-			for(int x = 0; x < width; x++)
-			{
-				*(pVec++) = gGray(*pix) * range / MAX_GRAY_VALUE;
-				pix++;
-			}
-		}
-	}
-	else
-		throw Ex("unsupported value for channels");
-}
-#endif // MIN_PREDICT
-
-// static
-void GVec::capValues(double* pVec, double cap, size_t dims)
+void GVec::absValues(double* pVec, size_t dims)
 {
 	while(true)
 	{
-		*pVec = std::min(*pVec, cap);
+		*pVec = std::abs(*pVec);
 		if(--dims == 0)
 			return;
-		pVec++;
-	}
-}
-
-// static
-void GVec::floorValues(double* pVec, double floor, size_t dims)
-{
-	while(true)
-	{
-		*pVec = std::max(*pVec, floor);
-		if(--dims == 0)
-			return;
-		pVec++;
 	}
 }
 
@@ -848,22 +1000,65 @@ void GVec::floorValues(double* pVec, double floor, size_t dims)
 // static
 void GVec::test()
 {
-	GRand prng(0);
-	GTEMPBUF(double, v1, 200);
-	double* v2 = v1 + 100;
-	for(int i = 0; i < 10; i++)
 	{
-		prng.spherical(v1, 100);
-		prng.spherical(v2, 100);
-		GVec::subtractComponent(v2, v1, 100);
-		GVec::normalize(v2, 100);
-		if(std::abs(GVec::correlation(v1, v2, 100)) > 1e-4)
-			throw Ex("Failed");
-		if(std::abs(GVec::squaredMagnitude(v1, 100) - 1) > 1e-4)
-			throw Ex("Failed");
-		if(std::abs(GVec::squaredMagnitude(v2, 100) - 1) > 1e-4)
-			throw Ex("Failed");
+		// Test some static methods
+		GRand prng(0);
+		GVec v1(100);
+		GVec v2(100);
+		for(int i = 0; i < 10; i++)
+		{
+			v1.fillSphericalShell(prng);
+			v2.fillSphericalShell(prng);
+			v2.subtractComponent(v1);
+			v2.normalize();
+			if(std::abs(v1.correlation(v2)) > 1e-4)
+				throw Ex("Failed");
+			if(std::abs(v1.squaredMagnitude() - 1) > 1e-4)
+				throw Ex("Failed");
+			if(std::abs(v2.squaredMagnitude() - 1) > 1e-4)
+				throw Ex("Failed");
+		}
 	}
+
+	// Test the basic operations of the GVec object
+	GVec v1(2);
+	v1[0] = 2.0;
+	v1[1] = 7.0;
+	GVec v2(v1);
+	if(v2.size() != 2)
+		throw Ex("failed");
+	if(v1.squaredDistance(v2) != 0.0)
+		throw Ex("failed");
+	std::swap(v1[0], v1[1]);
+	if(v1.squaredDistance(v2) != 50.0)
+		throw Ex("failed");
+	v2.fill(3.0);
+	v1 = v2;
+	if(v1.squaredMagnitude() != 18.0)
+		throw Ex("failed");
+	if(v1.data()[0] != 3.0 || v1.data()[1] != 3.0)
+		throw Ex("failed");
+
+	// Test overloaded operators
+	v1[0] = 1.0;
+	v1[1] = 2.0;
+	v2[0] = 3.0;
+	v2[1] = 4.0;
+	GVec v3 = v1 + v2;
+	if(v3.squaredMagnitude() != 52.0)
+		throw Ex("failed");
+	v3 += v1;
+	if(v3.squaredMagnitude() != 89.0)
+		throw Ex("failed");
+	v1 *= 2.0;
+	if(v1.squaredMagnitude() != 20.0)
+		throw Ex("failed");
+	v1 -= v2;
+	if(v1[0] != -1.0)
+		throw Ex("failed");
+	if(v1[1] != 0.0)
+		throw Ex("failed");
+	
 }
 #endif // MIN_PREDICT
 
@@ -1006,14 +1201,14 @@ void GIndexVec::print(std::ostream& stream, size_t* pVec, size_t dims)
 
 
 
-GRandomIndexIterator::GRandomIndexIterator(size_t length, GRand& rand)
-: m_length(length), m_rand(rand)
+GRandomIndexIterator::GRandomIndexIterator(size_t len, GRand& rnd)
+: m_length(len), m_rand(rnd)
 {
-	m_pIndexes = new size_t[length];
+	m_pIndexes = new size_t[len];
 	size_t* pInd = m_pIndexes;
-	for(size_t i = 0; i < length; i++)
+	for(size_t i = 0; i < len; i++)
 		*(pInd++) = i;
-	m_pEnd = m_pIndexes + length;
+	m_pEnd = m_pIndexes + len;
 	m_pCur = m_pEnd;
 }
 
@@ -1041,16 +1236,16 @@ bool GRandomIndexIterator::next(size_t& outIndex)
 
 
 
-GCoordVectorIterator::GCoordVectorIterator(size_t dims, size_t* pRanges)
+GCoordVectorIterator::GCoordVectorIterator(size_t dimCount, size_t* pRanges)
 {
 	m_pCoords = NULL;
-	reset(dims, pRanges);
+	reset(dimCount, pRanges);
 }
 
-GCoordVectorIterator::GCoordVectorIterator(vector<size_t>& ranges)
+GCoordVectorIterator::GCoordVectorIterator(vector<size_t>& range)
 {
 	m_pCoords = NULL;
-	reset(ranges);
+	reset(range);
 }
 
 GCoordVectorIterator::~GCoordVectorIterator()
@@ -1064,19 +1259,19 @@ void GCoordVectorIterator::reset()
 	m_sampleShift = INVALID_INDEX;
 }
 
-void GCoordVectorIterator::reset(size_t dims, size_t* pRanges)
+void GCoordVectorIterator::reset(size_t dimCount, size_t* pRanges)
 {
-	m_dims = dims;
+	m_dims = dimCount;
 	delete[] m_pCoords;
-	if(dims > 0)
+	if(dimCount > 0)
 	{
-		m_pCoords = new size_t[2 * dims];
-		m_pRanges = m_pCoords + dims;
+		m_pCoords = new size_t[2 * dimCount];
+		m_pRanges = m_pCoords + dimCount;
 		if(pRanges)
-			memcpy(m_pRanges, pRanges, sizeof(size_t) * dims);
+			memcpy(m_pRanges, pRanges, sizeof(size_t) * dimCount);
 		else
 		{
-			for(size_t i = 0; i < dims; i++)
+			for(size_t i = 0; i < dimCount; i++)
 				m_pRanges[i] = 1;
 		}
 	}
@@ -1088,16 +1283,16 @@ void GCoordVectorIterator::reset(size_t dims, size_t* pRanges)
 	reset();
 }
 
-void GCoordVectorIterator::reset(vector<size_t>& ranges)
+void GCoordVectorIterator::reset(vector<size_t>& range)
 {
-	m_dims = ranges.size();
+	m_dims = range.size();
 	delete[] m_pCoords;
 	if(m_dims > 0)
 	{
 		m_pCoords = new size_t[2 * m_dims];
 		m_pRanges = m_pCoords + m_dims;
 		for(size_t i = 0; i < m_dims; i++)
-			m_pRanges[i] = ranges[i];
+			m_pRanges[i] = range[i];
 	}
 	else
 	{

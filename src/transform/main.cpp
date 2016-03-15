@@ -246,14 +246,6 @@ GNeighborFinder* instantiateNeighborFinder(GMatrix* pData, GRand* pRand, GArgRea
 			int neighbors = args.pop_uint();
 			pNF = new GKdTree(pData, neighbors, NULL, true);
 		}
-		else if(_stricmp(alg, "saffron") == 0)
-		{
-			size_t medianCands = args.pop_uint();
-			size_t neighbors = args.pop_uint();
-			size_t tangentSpaceDims = args.pop_uint();
-			double thresh = args.pop_double();
-			pNF = new GSaffron(pData, medianCands, neighbors, tangentSpaceDims, thresh, pRand);
-		}
 		else if(_stricmp(alg, "temporal") == 0)
 		{
 			GMatrix* pControlData = loadData(args.pop_string());
@@ -300,12 +292,15 @@ void AddIndexAttribute(GArgReader& args)
 	const char* filename = args.pop_string();
 	double nStartValue = 0.0;
 	double nIncrement = 1.0;
+	string name = "index";
 	while(args.size() > 0)
 	{
 		if(args.if_pop("-start"))
 			nStartValue = args.pop_double();
 		else if(args.if_pop("-increment"))
 			nIncrement = args.pop_double();
+		else if(args.if_pop("-name"))
+			name = args.pop_string();
 		else
 			throw Ex("Invalid option: ", args.peek());
 	}
@@ -313,11 +308,31 @@ void AddIndexAttribute(GArgReader& args)
 	GMatrix* pData = loadData(filename);
 	Holder<GMatrix> hData(pData);
 	GArffRelation* pIndexRelation = new GArffRelation();
-	pIndexRelation->addAttribute("index", 0, NULL);
+	pIndexRelation->addAttribute(name.c_str(), 0, NULL);
 	GMatrix indexes(pIndexRelation);
 	indexes.newRows(pData->rows());
 	for(size_t i = 0; i < pData->rows(); i++)
 		indexes.row(i)[0] = nStartValue + i * nIncrement;
+	GMatrix* pUnified = GMatrix::mergeHoriz(&indexes, pData);
+	Holder<GMatrix> hUnified(pUnified);
+	pUnified->print(cout);
+}
+
+void addCategoryColumn(GArgReader& args)
+{
+	const char* filename = args.pop_string();
+	const char* catname = args.pop_string();
+	const char* catvalue = args.pop_string();
+	GMatrix* pData = loadData(filename);
+	Holder<GMatrix> hData(pData);
+	GArffRelation* pIndexRelation = new GArffRelation();
+	vector<const char*> vals;
+	vals.push_back(catvalue);
+	pIndexRelation->addAttribute(catname, 1, &vals);
+	GMatrix indexes(pIndexRelation);
+	indexes.newRows(pData->rows());
+	for(size_t i = 0; i < pData->rows(); i++)
+		indexes.row(i)[0] = 0.0;
 	GMatrix* pUnified = GMatrix::mergeHoriz(&indexes, pData);
 	Holder<GMatrix> hUnified(pUnified);
 	pUnified->print(cout);
@@ -356,9 +371,9 @@ void addNoise(GArgReader& args)
 	size_t cols = pData->cols() - excludeLast;
 	for(size_t r = 0; r < pData->rows(); r++)
 	{
-		double* pRow = pData->row(r);
+		GVec& pRow = pData->row(r);
 		for(size_t c = 0; c < cols; c++)
-			*(pRow++) += dev * prng.normal();
+			pRow[c] += dev * prng.normal();
 	}
 	pData->print(cout);
 }
@@ -380,25 +395,24 @@ void autoCorrelation(GArgReader& args)
 	Holder<GMatrix> hData(pData);
 	size_t lag = std::min((size_t)256, pData->rows() / 2);
 	size_t dims = pData->cols();
-	GTEMPBUF(double, mean, dims);
+	GVec mean(dims);
 	pData->centroid(mean);
 	GMatrix ac(0, dims + 1);
 	for(size_t i = 1; i <= lag; i++)
 	{
-		double* pRow = ac.newRow();
-		*(pRow++) = (double)i;
+		GVec& pRow = ac.newRow();
+		pRow[0] = (double)i;
 		for(size_t j = 0; j < dims; j++)
 		{
-			*pRow = 0;
+			pRow[j + 1] = 0;
 			size_t k;
 			for(k = 0; k + i < pData->rows(); k++)
 			{
-				double* pA = pData->row(k);
-				double* pB = pData->row(k + i);
-				*pRow += (pA[j] - mean[j]) * (pB[j] - mean[j]);
+				GVec& pA = pData->row(k);
+				GVec& pB = pData->row(k + i);
+				pRow[j + 1] += (pA[j] - mean[j]) * (pB[j] - mean[j]);
 			}
-			*pRow /= k;
-			pRow++;
+			pRow[j + 1] /= k;
 		}
 	}
 	ac.print(cout);
@@ -410,13 +424,12 @@ void center(GArgReader& args)
 	GMatrix* pData = loadData(args.pop_string());
 	Holder<GMatrix> hData(pData);
 	unsigned int r = args.pop_uint();
-	size_t cols = pData->cols();
-	double* pRow = pData->row(r);
+	GVec& pRow = pData->row(r);
 	for(size_t i = 0; i < r; ++i)
-		GVec::subtract(pData->row(i), pRow, cols);
+		pData->row(i) -= pRow;
 	for(size_t i = r + 1; i < pData->rows(); ++i)
-		GVec::subtract(pData->row(i), pRow, cols);
-	GVec::setAll(pRow, 0.0, cols);
+		pData->row(i) -= pRow;
+	pRow.fill(0.0);
 	pData->print(cout);
 }
 
@@ -478,19 +491,28 @@ void correlation(GArgReader& args)
 	cout << corr << "\n";
 }
 
+void covariance(GArgReader& args)
+{
+	GMatrix* pA = loadData(args.pop_string());
+	Holder<GMatrix> hA(pA);
+	GMatrix* pB = pA->covarianceMatrix();
+	Holder<GMatrix> hB(pB);
+	pB->print(cout);
+}
+
 void cumulativeColumns(GArgReader& args)
 {
 	GMatrix* pA = loadData(args.pop_string());
 	Holder<GMatrix> hA(pA);
 	vector<size_t> cols;
 	parseAttributeList(cols, args, pA->cols());
-	double* pPrevRow = pA->row(0);
+	GVec* pPrevRow = &pA->row(0);
 	for(size_t i = 1; i < pA->rows(); i++)
 	{
-		double* pRow = pA->row(i);
+		GVec& pRow = pA->row(i);
 		for(vector<size_t>::iterator it = cols.begin(); it != cols.end(); it++)
-			pRow[*it] += pPrevRow[*it];
-		pPrevRow = pRow;
+			pRow[*it] += (*pPrevRow)[*it];
+		pPrevRow = &pRow;
 	}
 	pA->print(cout);
 }
@@ -538,7 +560,7 @@ void Discretize(GArgReader& args)
 		double range = pData->columnMax(i) - min;
 		for(size_t j = 0; j < pData->rows(); j++)
 		{
-			double* pPat = pData->row(j);
+			GVec& pPat = pData->row(j);
 			pPat[i] = (double)std::max((size_t)0, std::min(nBuckets - 1, (size_t)floor(((pPat[i] - min) * nBuckets) / range)));
 		}
 		((GArffRelation*)&pData->relation())->setAttrValueCount(i, nBuckets);
@@ -558,7 +580,7 @@ void dropColumns(GArgReader& args)
 	std::sort(colList.begin(), colList.end());
 	std::reverse(colList.begin(), colList.end());
 	for(size_t i = 0; i < colList.size(); i++)
-		pData->deleteColumn(colList[i]);
+		pData->deleteColumns(colList[i], 1);
 	pData->print(cout);
 }
 
@@ -575,7 +597,7 @@ void dropHomogeneousCols(GArgReader& args)
 	}
 	std::reverse(colList.begin(), colList.end());
 	for(size_t i = 0; i < colList.size(); i++)
-		pData->deleteColumn(colList[i]);
+		pData->deleteColumns(colList[i], 1);
 	pData->print(cout);
 }
 
@@ -603,7 +625,7 @@ void keepOnlyColumns(GArgReader& args)
 	//keeps the column indices for undeleted columns the same even
 	//after deletion.
 	for(size_t i = 0; i < colsToDel.size(); i++)
-		pData->deleteColumn(colsToDel[i]);
+		pData->deleteColumns(colsToDel[i], 1);
 	pData->print(cout);
 }
 
@@ -615,7 +637,7 @@ void DropMissingValues(GArgReader& args)
 	size_t dims = pRelation->size();
 	for(size_t i = pData->rows() - 1; i < pData->rows(); i--)
 	{
-		double* pPat = pData->row(i);
+		GVec& pPat = pData->row(i);
 		bool drop = false;
 		for(size_t j = 0; j < dims; j++)
 		{
@@ -711,15 +733,15 @@ void dropIfTooClose(GArgReader& args)
 	{
 		GMatrix keep(pData->relation().clone());
 		GReleaseDataHolder hKeep(&keep);
-		keep.takeRow(pData->row(0));
-		double* pLastKept = pData->row(0);
+		keep.takeRow(&pData->row(0));
+		GVec& pLastKept = pData->row(0);
 		for(size_t i = 1; i < pData->rows(); i++)
 		{
-			double* pCand = pData->row(i);
+			GVec& pCand = pData->row(i);
 			if(pCand[col] - pLastKept[col] >= minGap)
 			{
-				keep.takeRow(pCand);
-				pLastKept = pCand;
+				keep.takeRow(&pCand);
+				pLastKept.copy(pCand);
 			}
 		}
 		keep.print(cout);
@@ -769,7 +791,7 @@ void enumerateValues(GArgReader& args)
 		map<double,size_t> themap;
 		for(size_t i = 0; i < pData->rows(); i++)
 		{
-			double* pRow = pData->row(i);
+			GVec& pRow = pData->row(i);
 			map<double,size_t>::iterator it = themap.find(pRow[col]);
 			if(it == themap.end())
 			{
@@ -823,7 +845,7 @@ void Export(GArgReader& args)
 
 	// Print data
 	for(size_t i = 0; i < pData->rows(); i++)
-		pData->relation().printRow(cout, pData->row(i), separator, missing);
+		pData->relation().printRow(cout, pData->row(i).data(), separator, missing);
 }
 
 void Import(GArgReader& args)
@@ -901,16 +923,14 @@ void ComputeMeanSquaredError(GMatrix* pData1, GMatrix* pData2, size_t dims, doub
 	GVec::setAll(pResults, 0.0, dims);
 	for(size_t i = 0; i < pData1->rows(); i++)
 	{
-		double* pPat1 = pData1->row(i);
-		double* pPat2 = pData2->row(i);
+		GVec& pPat1 = pData1->row(i);
+		GVec& pPat2 = pData2->row(i);
 		for(size_t j = 0; j < dims; j++)
 		{
-			if(*pPat1 != UNKNOWN_REAL_VALUE && *pPat2 != UNKNOWN_REAL_VALUE)
+			if(pPat1[j] != UNKNOWN_REAL_VALUE && pPat2[j] != UNKNOWN_REAL_VALUE)
 			{
-				double d = (*pPat1 - *pPat2);
+				double d = (pPat1[j] - pPat2[j]);
 				pResults[j] += (d * d);
-				pPat1++;
-				pPat2++;
 			}
 		}
 	}
@@ -954,10 +974,10 @@ public:
 		m_transform.fromVector(pVector + m_attrs, m_attrs);
 		for(size_t i = 0; i < m_pData2->rows(); i++)
 		{
-			double* pPatIn = m_pData2->row(i);
-			double* pPatOut = m_transformed.row(i);
+			GVec& pPatIn = m_pData2->row(i);
+			GVec& pPatOut = m_transformed.row(i);
 			m_transform.multiply(pPatIn, pPatOut);
-			GVec::add(pPatOut, pVector, m_attrs);
+			GVec::add(pPatOut.data(), pVector, m_attrs);
 		}
 	}
 
@@ -977,7 +997,10 @@ public:
 		if(sumOverAttributes)
 			cout << GVec::sumElements(m_pResults, m_attrs);
 		else
-			GVec::print(cout, 14, m_pResults, m_attrs);
+		{
+			GVecWrapper vw(m_pResults, m_attrs);
+			vw.vec().print(cout);
+		}
 	}
 
 	const double* GetResults() { return m_pResults; }
@@ -1045,7 +1068,10 @@ void MeasureMeanSquaredError(GArgReader& args)
 		if(sumOverAttributes)
 			cout << GVec::sumElements(results, dims);
 		else
-			GVec::print(cout, 14, results, dims);
+		{
+			GVecWrapper vw(results, dims);
+			vw.vec().print(cout);
+		}
 	}
 	cout << "\n";
 }
@@ -1161,10 +1187,8 @@ void normalizeMagnitude(GArgReader& args)
 {
 	GMatrix* pData = loadData(args.pop_string());
 	Holder<GMatrix> hData(pData);
-	GRand rand(0);
-	size_t cols = pData->cols();
 	for(size_t i = 0; i < pData->rows(); i++)
-		GVec::safeNormalize(pData->row(i), cols, &rand);
+		pData->row(i).normalize();
 	pData->print(cout);
 }
 
@@ -1252,23 +1276,21 @@ void overlay(GArgReader& args)
 	const GRelation* pRelOver = &pOver->relation();
 	for(size_t i = 0; i < pOver->rows(); i++)
 	{
-		double* pVecBase = pBase->row(i);
-		double* pVecOver = pOver->row(i);
+		GVec& pVecBase = pBase->row(i);
+		GVec& pVecOver = pOver->row(i);
 		for(size_t j = 0; j < dims; j++)
 		{
 			size_t vals = pRelOver->valueCount(j);
 			if(vals == 0)
 			{
-				if(*pVecOver == UNKNOWN_REAL_VALUE)
-					*pVecOver = *pVecBase;
+				if(pVecOver[j] == UNKNOWN_REAL_VALUE)
+					pVecOver[j] = pVecBase[j];
 			}
 			else
 			{
-				if(*pVecOver == UNKNOWN_DISCRETE_VALUE)
-					*pVecOver = (double)std::max((size_t)0, std::min(vals - 1, (size_t)floor(*pVecBase + 0.5)));
+				if(pVecOver[j] == UNKNOWN_DISCRETE_VALUE)
+					pVecOver[j] = (double)std::max((size_t)0, std::min(vals - 1, (size_t)floor(pVecBase[j] + 0.5)));
 			}
-			pVecBase++;
-			pVecOver++;
 		}
 	}
 	pOver->print(cout);
@@ -1283,7 +1305,7 @@ void powerColumns(GArgReader& args)
 	double exponent = args.pop_double();
 	for(size_t i = 0; i < pA->rows(); i++)
 	{
-		double* pRow = pA->row(i);
+		GVec& pRow = pA->row(i);
 		for(vector<size_t>::iterator it = cols.begin(); it != cols.end(); it++)
 			pRow[*it] = pow(pRow[*it], exponent);
 	}
@@ -1312,6 +1334,55 @@ void reducedRowEchelonForm(GArgReader& args)
 	Holder<GMatrix> hA(pA);
 	pA->toReducedRowEchelonForm();
 	pA->print(cout);
+}
+
+void reorderColumns(GArgReader& args)
+{
+	GMatrix* pData = loadData(args.pop_string());
+	Holder<GMatrix> hData(pData);
+
+	// Parse and check the list of columns
+	vector<size_t> colList;
+	size_t attrCount = pData->cols();
+	parseAttributeList(colList, args, attrCount);
+	for(size_t i = 0; i < colList.size(); i++)
+	{
+		size_t ind = colList[i];
+		if(ind >= pData->cols())
+			throw Ex("Column ", to_str(ind), " is out of range.");
+	}
+
+	// Make a list of indexes
+	vector<size_t> pos_to_col;
+	vector<size_t> col_to_pos;
+	pos_to_col.reserve(pData->cols());
+	col_to_pos.reserve(pData->cols());
+	for(size_t i = 0; i < pData->cols(); i++)
+	{
+		pos_to_col.push_back(i);
+		col_to_pos.push_back(i);
+	}
+
+	// Do the swapping
+	for(size_t i = 0; i < colList.size(); i++)
+	{
+		if(pos_to_col[i] == colList[i])
+			continue;
+		size_t j = col_to_pos[colList[i]];
+		size_t coli = pos_to_col[i];
+		size_t colj = pos_to_col[j];
+		pData->swapColumns(i, j);
+		pos_to_col[i] = colj;
+		pos_to_col[j] = coli;
+		col_to_pos[coli] = j;
+		col_to_pos[colj] = i;
+	}
+
+	// Drop superfluous columns
+	if(pData->cols() > colList.size())
+		pData->deleteColumns(colList.size(), pData->cols() - colList.size());
+
+	pData->print(cout);
 }
 
 void rotate(GArgReader& args)
@@ -1349,11 +1420,11 @@ void rotate(GArgReader& args)
 	double cosAngle = std::cos(angle);
 	double sinAngle = std::sin(angle);
 	for(std::size_t rowIdx = 0; rowIdx < pA->rows(); ++rowIdx){
-	  double* row = (*pA)[rowIdx];
-	  double x = row[colx];
-	  double y = row[coly];
-	  row[colx]=x*cosAngle-y*sinAngle;
-	  row[coly]=x*sinAngle+y*cosAngle;
+		GVec& row = (*pA)[rowIdx];
+		double x = row[colx];
+		double y = row[coly];
+		row[colx]=x*cosAngle-y*sinAngle;
+		row[coly]=x*sinAngle+y*cosAngle;
 	}
 	pA->print(cout);
 }
@@ -1422,6 +1493,55 @@ void sampleRows(GArgReader& args)
 	}
 }
 
+void sampleRowsRegularly(GArgReader& args)
+{
+	const char* filename = args.pop_string();
+	size_t freq = args.pop_uint();
+	PathData pd;
+	GFile::parsePath(filename, &pd);
+	bool arff = false;
+	if(_stricmp(filename + pd.extStart, ".arff") == 0)
+		arff = true;
+
+	size_t size = 0;
+	std::ifstream s;
+	s.exceptions(std::ios::failbit|std::ios::badbit);
+	try
+	{
+		s.open(filename, std::ios::binary);
+		s.seekg(0, std::ios::end);
+		size = (size_t)s.tellg();
+		s.seekg(0, std::ios::beg);
+	}
+	catch(const std::exception&)
+	{
+		if(GFile::doesFileExist(filename))
+			throw Ex("Error while trying to open the existing file: ", filename);
+		else
+			throw Ex("File not found: ", filename);
+	}
+	char* pLine = new char[MAX_LINE_LENGTH];
+	ArrayHolder<char> hLine(pLine);
+	size_t line = 1;
+	while(size > 0)
+	{
+		s.getline(pLine, std::min(size + 1, size_t(MAX_LINE_LENGTH)));
+		size_t linelen = std::min(size, size_t(s.gcount()));
+		if(linelen >= MAX_LINE_LENGTH - 1)
+			throw Ex("Line ", to_str(line), " is too long"); // todo: just resize the buffer here
+		if(arff)
+		{
+			if(_strnicmp(pLine, "@DATA", 5) == 0)
+				arff = false;
+			cout << pLine << "\n";
+		}
+		else if(line % freq == 0)
+			cout << pLine << "\n";
+		size -= linelen;
+		line++;
+	}
+}
+
 void scaleColumns(GArgReader& args)
 {
 	GMatrix* pA = loadData(args.pop_string());
@@ -1431,7 +1551,7 @@ void scaleColumns(GArgReader& args)
 	double scalar = args.pop_double();
 	for(size_t i = 0; i < pA->rows(); i++)
 	{
-		double* pRow = pA->row(i);
+		GVec& pRow = pA->row(i);
 		for(vector<size_t>::iterator it = cols.begin(); it != cols.end(); it++)
 			pRow[*it] *= scalar;
 	}
@@ -1447,7 +1567,7 @@ void shiftColumns(GArgReader& args)
 	double offset = args.pop_double();
 	for(size_t i = 0; i < pA->rows(); i++)
 	{
-		double* pRow = pA->row(i);
+		GVec& pRow = pA->row(i);
 		for(vector<size_t>::iterator it = cols.begin(); it != cols.end(); it++)
 			pRow[*it] += offset;
 	}
@@ -1487,7 +1607,7 @@ void significance(GArgReader& args)
 		int more = 0;
 		for(size_t i = 0; i < pData->rows(); i++)
 		{
-			double* pRow = pData->row(i);
+			GVec& pRow = pData->row(i);
 			if(std::abs(pRow[attr1] - pRow[attr2]) < tolerance)
 				eq++;
 			else if(pRow[attr1] < pRow[attr2])
@@ -1516,7 +1636,7 @@ void significance(GArgReader& args)
 		cout << "v=" << v << ", t=" << t << ", p=" << p << "\n";
 	}
 	{
-		cout << "\n### Wilcoxon Signed Ranks Test";
+		cout << "\n### Wilcoxon Signed Ranks Test\n";
 		int num;
 		double wMinus, wPlus;
 		pData->wilcoxonSignedRanksTest(attr1, attr2, tolerance, &num, &wMinus, &wPlus);
@@ -1528,8 +1648,8 @@ void significance(GArgReader& args)
 		double p_min = 0.5 * GMath::wilcoxonPValue(num, w_min);
 		if(num < 10)
 			cout << "Because the number of signed ranks is small, you should use a lookup table, rather than rely on the normal approximation for the P-value.\n";
-		cout << "One-tailed P-value (for directional comparisons) computed with a normal approximation using W_min = " << 0.5 * p_min << "\n";
-		cout << "Two-tailed P-value (for non-directional comparisons) computed with a normal approximation using W_min = " << p_min << "\n";
+		cout << "One-tailed P-value (for directional comparisons--is A better than B?) computed with a normal approximation using W_min = " << 0.5 * p_min << "\n";
+		cout << "Two-tailed P-value (for non-directional comparisons--is A different than B?) computed with a normal approximation using W_min = " << p_min << "\n";
 		cout << "To show that something is \"better\" than something else, use the one-tailed P-value.\n";
 		cout << "Commonly, a P-value less that 0.05 is considered to be significant.\n";
 /*
@@ -1656,11 +1776,11 @@ void splitFold(GArgReader& args)
 	size_t begin = pData->rows() * fold / folds;
 	size_t end = pData->rows() * (fold + 1) / folds;
 	for(size_t i = 0; i < begin; i++)
-		train.copyRow(pData->row(i));
+		train.newRow().copy(pData->row(i));
 	for(size_t i = begin; i < end; i++)
-		test.copyRow(pData->row(i));
+		test.newRow().copy(pData->row(i));
 	for(size_t i = end; i < pData->rows(); i++)
-		train.copyRow(pData->row(i));
+		train.newRow().copy(pData->row(i));
 	train.saveArff(filenameTrain.c_str());
 	test.saveArff(filenameTest.c_str());
 }
@@ -1695,7 +1815,7 @@ void splitClass(GArgReader& args)
 		oss << ".arff";
 		string s = oss.str();
 		if(dropClass)
-			tmp.deleteColumn(classAttr);
+			tmp.deleteColumns(classAttr, 1);
 		tmp.saveArff(s.c_str());
 	}
 }
@@ -1806,10 +1926,13 @@ void filterRows(GArgReader& args)
 	double dmax = args.pop_double();
 
 	bool invert = false;
+	bool preserveOrder = false;
 	while(args.size() > 0)
 	{
 		if(args.if_pop("-invert"))
 			invert = true;
+		else if(args.if_pop("-preserveOrder"))
+			preserveOrder = true;
 		else
 			throw Ex("Invalid option: ", args.peek());
 	}
@@ -1820,7 +1943,12 @@ void filterRows(GArgReader& args)
 		{
 			double val = pData->row(i)[attr];
 			if(val >= dmin && val <= dmax)
-				pData->deleteRow(i);
+			{
+				if(preserveOrder)
+					pData->deleteRowPreserveOrder(i);
+				else
+					pData->deleteRow(i);
+			}
 		}
 	}
 	else
@@ -1829,7 +1957,12 @@ void filterRows(GArgReader& args)
 		{
 			double val = pData->row(i)[attr];
 			if(val == UNKNOWN_REAL_VALUE || val < dmin || val > dmax)
-				pData->deleteRow(i);
+			{
+				if(preserveOrder)
+					pData->deleteRowPreserveOrder(i);
+				else
+					pData->deleteRow(i);
+			}
 		}
 	}
 	pData->print(cout);
@@ -1880,7 +2013,7 @@ void _function(GArgReader& args)
 		params.resize(pFunc->m_expectedParams);
 		for(size_t j = 0; j < pData->rows(); j++)
 		{
-			double* pIn = pData->row(j);
+			GVec& pIn = pData->row(j);
 			for(size_t k = 0; k < (size_t)pFunc->m_expectedParams; k++)
 				params[k] = pIn[k];
 			out[j][i - 1] = pFunc->call(params, mfp);
@@ -1944,12 +2077,12 @@ void _function2(GArgReader& args)
 	{
 		for(size_t i = 0; i < gCount; i++)
 			gsum[i] = 0.0;
-		double* pCur = pData->row(j);
+		GVec& pCur = pData->row(j);
 
 		// Compute the gsum vector, which applies all the "g" functions to every row and sums the returned values
 		for(size_t k = 0; k < pData->rows(); k++)
 		{
-			double* pItt = pData->row(k);
+			GVec& pItt = pData->row(k);
 			{
 				for(int i = 1; true; i++)
 				{
@@ -2173,12 +2306,12 @@ void transition(GArgReader& args)
 	pTransition->newRows(pActions->rows() - 1);
 	for(size_t i = 0; i < pActions->rows() - 1; i++)
 	{
-		double* pOut = pTransition->row(i);
-		GVec::copy(pOut, pActions->row(i), actionDims);
-		GVec::copy(pOut + actionDims, pState->row(i), stateDims);
-		GVec::copy(pOut + actionDims + stateDims, pState->row(i + 1), stateDims);
+		GVec& pOut = pTransition->row(i);
+		GVec::copy(pOut.data(), pActions->row(i).data(), actionDims);
+		GVec::copy(pOut.data() + actionDims, pState->row(i).data(), stateDims);
+		GVec::copy(pOut.data() + actionDims + stateDims, pState->row(i + 1).data(), stateDims);
 		if(delta)
-			GVec::subtract(pOut + actionDims + stateDims, pState->row(i), stateDims);
+			GVec::subtract(pOut.data() + actionDims + stateDims, pState->row(i).data(), stateDims);
 	}
 	pTransition->print(cout);
 }
@@ -2266,6 +2399,7 @@ int main(int argc, char *argv[])
 		else if(args.if_pop("usage")) ShowUsage(appName);
 		else if(args.if_pop("add")) addMatrices(args);
 		else if(args.if_pop("addindexcolumn")) AddIndexAttribute(args);
+		else if(args.if_pop("addcategorycolumn")) addCategoryColumn(args);
 		else if(args.if_pop("addnoise")) addNoise(args);
 		else if(args.if_pop("aggregatecols")) aggregateCols(args);
 		else if(args.if_pop("aggregaterows")) aggregateRows(args);
@@ -2275,6 +2409,7 @@ int main(int argc, char *argv[])
 		else if(args.if_pop("cholesky")) cholesky(args);
 		else if(args.if_pop("colstats")) colstats(args);
 		else if(args.if_pop("correlation")) correlation(args);
+		else if(args.if_pop("covariance")) covariance(args);
 		else if(args.if_pop("cumulativecolumns")) cumulativeColumns(args);
 		else if(args.if_pop("determinant")) determinant(args);
 		else if(args.if_pop("discretize")) Discretize(args);
@@ -2310,8 +2445,10 @@ int main(int argc, char *argv[])
 		else if(args.if_pop("prettify")) prettify(args);
 		else if(args.if_pop("pseudoinverse")) pseudoInverse(args);
 		else if(args.if_pop("reducedrowechelonform")) reducedRowEchelonForm(args);
+		else if(args.if_pop("reordercolumns")) reorderColumns(args);
 		else if(args.if_pop("rotate")) rotate(args);
 		else if(args.if_pop("samplerows")) sampleRows(args);
+		else if(args.if_pop("samplerowsregularly")) sampleRowsRegularly(args);
 		else if(args.if_pop("scalecolumns")) scaleColumns(args);
 		else if(args.if_pop("shiftcolumns")) shiftColumns(args);
 		else if(args.if_pop("shuffle")) Shuffle(args);

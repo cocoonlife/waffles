@@ -84,18 +84,16 @@ class GCategoricalDistribution : public GUnivariateDistribution
 protected:
 	size_t m_nValueCount;
 	size_t m_nMode;
-	double* m_pValues;
+	GVec m_pValues;
 
 public:
 	GCategoricalDistribution() : GUnivariateDistribution()
 	{
 		m_nValueCount = 0;
-		m_pValues = NULL;
 	}
 
 	virtual ~GCategoricalDistribution()
 	{
-		delete[] m_pValues;
 	}
 
 	/// Load values from a text format
@@ -148,12 +146,11 @@ public:
 	/// Resizes the vector of probabilities if it
 	/// does not have nValueCount elements, and returns
 	/// that vector
-	double* values(size_t nValueCount)
+	GVec& values(size_t nValueCount)
 	{
 		if(m_nValueCount != nValueCount)
 		{
-			delete[] m_pValues;
-			m_pValues = new double[nValueCount];
+			m_pValues.resize(nValueCount);
 			m_nValueCount = nValueCount;
 		}
 		return m_pValues;
@@ -234,15 +231,14 @@ class GCategoricalSamplerBatch
 {
 protected:
 	size_t m_categories;
-	const double* m_pDistribution;
+	const GVec& m_distribution;
 	GRandomIndexIterator m_ii;
 
 public:
 	/// categories specifies the number of categories.
-	/// pDistribution should specify a probability value for each
-	/// category. They should sum to 1.
+	/// distribution should specify a probability value for each category. They should sum to 1.
 	/// pDistribution is expected to remain valid for the duration of this object.
-	GCategoricalSamplerBatch(size_t categories, const double* pDistribution, GRand& rand);
+	GCategoricalSamplerBatch(size_t categories, const GVec& distribution, GRand& rand);
 	~GCategoricalSamplerBatch();
 
 	/// This will draw a batch of samples from the categorical distribution.
@@ -314,11 +310,11 @@ public:
 	}
 
 	/// Sets the mean and variance of this distribution
-	void setMeanAndVariance(double mean, double variance)
+	void setMeanAndVariance(double newmean, double newvariance)
 	{
-		GAssert(mean > -1e308 && variance > -1e-5);
-		m_mean = mean;
-		m_variance = variance;
+		GAssert(newmean > -1e308 && newvariance > -1e-5);
+		m_mean = newmean;
+		m_variance = newvariance;
 		m_height = 0;
 	}
 
@@ -665,10 +661,10 @@ public:
 	virtual double likelihood(double x);
 
 	/// Sets the parameters of this distribution
-	void setParams(double alpha, double beta)
+	void setParams(double newalpha, double newbeta)
 	{
-		m_alpha = alpha;
-		m_beta = beta;
+		m_alpha = newalpha;
+		m_beta = newbeta;
 	}
 
 	/// Returns the mean
@@ -747,24 +743,24 @@ class GMultivariateNormalDistribution : public GDistribution
 protected:
 	size_t m_nDims;
 	double m_dScale;
-	double* m_pMean;
-	double* m_pVector1;
-	double* m_pVector2;
+	GVec m_mean;
+	GVec m_vector1;
+	GVec m_vector2;
 	GMatrix* m_pInverseCovariance;
 	GMatrix* m_pCholesky;
 
 public:
-	GMultivariateNormalDistribution(const double* pMean, GMatrix* pCovariance);
+	GMultivariateNormalDistribution(const GVec& mean, GMatrix* pCovariance);
 	GMultivariateNormalDistribution(GMatrix* pData, size_t nDims);
 	~GMultivariateNormalDistribution();
 
 	/// Compute the likelihood of the specified vector (which is assumed
 	/// to be the same size as the number of columns or rows in the covariance
 	/// matrix).
-	double likelihood(const double* pParams);
+	double likelihood(const GVec& x);
 
 	/// Generates a random vector from this multivariate Normal distribution.
-	double* randomVector(GRand* pRand);
+	void randomVector(GRand* pRand, GVec& out);
 
 protected:
 	void precompute(GMatrix* pCovariance);

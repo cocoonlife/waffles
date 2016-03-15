@@ -35,6 +35,7 @@
 #include <string.h>
 #include <sstream>
 #include <cmath>
+#include <memory>
 
 namespace GClasses {
 using std::vector;
@@ -1399,22 +1400,22 @@ void GImage::loadBmp(const unsigned char* pRawData, int nLen)
 	}
 }
 
-void GImage::crop(int left, int top, int width, int height)
+void GImage::crop(int left, int top, int wid, int hgt)
 {
-	if(width < 1 || height < 1)
+	if(wid < 1 || hgt < 1)
 	{
-		setSize(width, height);
+		setSize(wid, hgt);
 		return;
 	}
 	GImage tmp;
-	tmp.setSize(width, height);
+	tmp.setSize(wid, hgt);
 
 	int l = std::max(0, left);
 	int t = std::max(0, top);
 	int ll = std::max(-left, 0);
 	int tt = std::max(-top, 0);
-	int w = std::min((int)width - ll, std::min((int)m_width - l, (int)width));
-	int h = std::min((int)height - tt, std::min((int)m_height - t, (int)height));
+	int w = std::min((int)wid - ll, std::min((int)m_width - l, (int)wid));
+	int h = std::min((int)hgt - tt, std::min((int)m_height - t, (int)hgt));
 	GRect r(l, t, w, h);
 	tmp.blit(ll, tt, this, &r);
 	swapData(&tmp);
@@ -2454,18 +2455,18 @@ void GImage::textChar(char ch, int x, int y, int wid, int hgt, float size, unsig
 	}
 }
 
-void GImage::text(const char* text, int x, int y, float size, unsigned int col, int wid, int hgt)
+void GImage::text(const char* txt, int x, int y, float size, unsigned int col, int wid, int hgt)
 {
-	while(*text != '\0')
+	while(*txt != '\0')
 	{
-		unsigned char charIndex = std::min((unsigned char)95, (unsigned char)(*text - 32));
+		unsigned char charIndex = std::min((unsigned char)95, (unsigned char)(*txt - 32));
 		int ofs = g_fontCharStart[charIndex];
 		int w = g_fontCharStart[charIndex + 1] - ofs;
-		textChar(*text, x, y, wid, hgt, size, col);
+		textChar(*txt, x, y, wid, hgt, size, col);
 		int charwid = std::max(1, (int)((float)w * size));
 		x += charwid;
 		wid -= charwid;
-		text++;
+		txt++;
 	}
 }
 
@@ -3093,7 +3094,7 @@ void GImage::highPassFilter(double dExtent)
 	// Convert to the Fourier domain
 	int nChannelWidth, nChannelHeight;
 	struct ComplexNumber* pArray = GFourier::imageToFftArray(this, &nChannelWidth, &nChannelHeight);
-	ArrayHolder<struct ComplexNumber> hArray(pArray);
+	std::unique_ptr<struct ComplexNumber[]> hArray(pArray);
 	int nChannelSize = nChannelWidth * nChannelHeight;
 
 	// Filter out the low frequency data
@@ -3135,7 +3136,7 @@ void GImage::lowPassFilter(double dExtent)
 	// Convert to the Fourier domain
 	int nChannelWidth, nChannelHeight;
 	struct ComplexNumber* pArray = GFourier::imageToFftArray(this, &nChannelWidth, &nChannelHeight);
-	ArrayHolder<struct ComplexNumber> hArray(pArray);
+	std::unique_ptr<struct ComplexNumber[]> hArray(pArray);
 	int nChannelSize = nChannelWidth * nChannelHeight;
 
 	// Filter out the low frequency data

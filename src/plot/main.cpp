@@ -40,7 +40,6 @@
 #include "../GClasses/GNeighborFinder.h"
 #include "../GClasses/GNeuralNet.h"
 #include "../GClasses/GManifold.h"
-#include "../GClasses/GSystemLearner.h"
 #include "../GClasses/GSelfOrganizingMap.h"
 #include "../GClasses/usage.h"
 #include <time.h>
@@ -53,6 +52,7 @@
 #include <vector>
 #include <exception>
 #include <set>
+#include <memory>
 
 using namespace GClasses;
 using std::string;
@@ -195,7 +195,7 @@ void loadDataWithSwitches(GMatrix& data, GArgReader& args, size_t* pLabelDims)
 	std::sort(ignore.begin(), ignore.end());
 	for(size_t i = ignore.size() - 1; i < ignore.size(); i--)
 	{
-		data.deleteColumn(ignore[i]);
+		data.deleteColumns(ignore[i], 1);
 		for(size_t j = 0; j < labels.size(); j++)
 		{
 			if(labels[j] >= ignore[i])
@@ -232,7 +232,7 @@ GMatrix* loadData(const char* szFilename)
 {
 	// Load the dataset by extension
 	GMatrix* pM = new GMatrix();
-	Holder<GMatrix> hM(pM);
+	std::unique_ptr<GMatrix> hM(pM);
 	GMatrix& m = *pM;
 	PathData pd;
 	GFile::parsePath(szFilename, &pd);
@@ -267,7 +267,7 @@ void showInstantiateNeighborFinderError(const char* szMessage, GArgReader& args)
 	cerr << szMessage << "\n\n";
 	const char* szNFName = args.peek();
 	UsageNode* pNFTree = makeNeighborUsageTree();
-	Holder<UsageNode> hNFTree(pNFTree);
+	std::unique_ptr<UsageNode> hNFTree(pNFTree);
 	if(szNFName)
 	{
 		UsageNode* pUsageAlg = pNFTree->choice(szNFName);
@@ -325,18 +325,10 @@ GNeighborFinder* instantiateNeighborFinder(GMatrix* pData, GRand* pRand, GArgRea
 			int neighbors = args.pop_uint();
 			pNF = new GKdTree(pData, neighbors, NULL, true);
 		}
-		else if(_stricmp(alg, "saffron") == 0)
-		{
-			size_t medianCands = args.pop_uint();
-			size_t neighbors = args.pop_uint();
-			size_t tangentSpaceDims = args.pop_uint();
-			double thresh = args.pop_double();
-			pNF = new GSaffron(pData, medianCands, neighbors, tangentSpaceDims, thresh, pRand);
-		}
 		else if(_stricmp(alg, "temporal") == 0)
 		{
 			GMatrix* pControlData = loadData(args.pop_string());
-			Holder<GMatrix> hControlData(pControlData);
+			std::unique_ptr<GMatrix> hControlData(pControlData);
 			if(pControlData->rows() != pData->rows())
 				throw Ex("mismatching number of rows");
 			int neighbors = args.pop_uint();
@@ -377,7 +369,7 @@ void PlotBar(GArgReader& args)
 {
 	// Load the data
 	GMatrix* pData = loadData(args.pop_string());
-	Holder<GMatrix> hData(pData);
+	std::unique_ptr<GMatrix> hData(pData);
 	//if(!pData->relation()->areContinuous())
 	//	throw Ex("Expected all attributes to be continuous");
 
@@ -430,7 +422,7 @@ void PlotBar(GArgReader& args)
 	}
 
 	// Determine the range
-	double* pRow = pData->row(row);
+	GVec& pRow = pData->row(row);
 	if(ymin == UNKNOWN_REAL_VALUE || ymax == UNKNOWN_REAL_VALUE)
 	{
 		ymin = pRow[0];
@@ -510,6 +502,7 @@ void PlotEquation(GArgReader& args)
 	bool aspect = false;
 	bool horizMarks = true;
 	bool vertMarks = true;
+	bool text = true;
 	double thickness = 1.0;
 	while(args.next_is_flag())
 	{
@@ -535,6 +528,8 @@ void PlotEquation(GArgReader& args)
 			horizMarks = false;
 		else if(args.if_pop("-novmarks"))
 			vertMarks = false;
+		else if(args.if_pop("-notext"))
+			text = false;
 		else if(args.if_pop("-nogrid"))
 		{
 			horizMarks = false;
@@ -578,16 +573,17 @@ void PlotEquation(GArgReader& args)
 	GSVG svg(width, height);
 	svg.newChart(xmin, ymin, xmax, ymax, 0, 0, margin);
 	if(horizMarks)
-		svg.horizMarks((int)maxHorizMarks);
+		svg.horizMarks((int)maxHorizMarks, !text);
 	if(vertMarks)
 	{
 		if(maxVertMarks == INVALID_INDEX)
 			maxVertMarks = maxHorizMarks * height / width;
-		svg.vertMarks((int)maxVertMarks);
+		svg.vertMarks((int)maxVertMarks, !text);
 	}
 
 	// Draw the equation as the label under the graph
-	svg.text(0.5 * (xmin + xmax), svg.horizLabelPos(), expr.c_str(), 1.5, GSVG::Middle, 0xff000000, 0, serifs);
+	if(text)
+		svg.text(0.5 * (xmin + xmax), svg.horizLabelPos(), expr.c_str(), 1.5, GSVG::Middle, 0xff000000, 0, serifs);
 
 	// Count the equations
 	size_t equationCount = 0;
@@ -1027,7 +1023,7 @@ void makeGridDataSubset(GMatrix* pSource, GMatrix* pDest, size_t horizPos, size_
 		for(size_t i = 0; i < pSource->rows(); i++)
 		{
 			if(pSource->row(i)[vertAttr] == vertValue)
-				pDest->takeRow(pSource->row(i));
+				pDest->takeRow(&pSource->row(i));
 		}
 	}
 	else if(vertAttr == INVALID_INDEX)
@@ -1036,7 +1032,7 @@ void makeGridDataSubset(GMatrix* pSource, GMatrix* pDest, size_t horizPos, size_
 		for(size_t i = 0; i < pSource->rows(); i++)
 		{
 			if(pSource->row(i)[horizAttr] == horizValue)
-				pDest->takeRow(pSource->row(i));
+				pDest->takeRow(&pSource->row(i));
 		}
 	}
 	else
@@ -1046,7 +1042,7 @@ void makeGridDataSubset(GMatrix* pSource, GMatrix* pDest, size_t horizPos, size_
 		for(size_t i = 0; i < pSource->rows(); i++)
 		{
 			if(pSource->row(i)[horizAttr] == horizValue && pSource->row(i)[vertAttr] == vertValue)
-				pDest->takeRow(pSource->row(i));
+				pDest->takeRow(&pSource->row(i));
 		}
 	}
 }
@@ -1055,7 +1051,7 @@ void PlotScatter(GArgReader& args)
 {
 	// Load the data
 	GMatrix* pData = loadData(args.pop_string());
-	Holder<GMatrix> hData(pData);
+	std::unique_ptr<GMatrix> hData(pData);
 
 	// Values pertaining to grids of charts
 	size_t horizCharts = 1;
@@ -1232,7 +1228,7 @@ void semanticMap(GArgReader& args){
   string dataFile = args.pop_string();
 
   // Load the data
-  Holder<GMatrix> hData(loadData(dataFile.c_str()));
+  std::unique_ptr<GMatrix> hData(loadData(dataFile.c_str()));
   if(hData->rows() < 1){
     throw Ex("The dataset is empty.  Cannot make a semantic map from "
 	       "an empty dataset.");
@@ -1313,14 +1309,14 @@ void semanticMap(GArgReader& args){
   if(useVarianceAsLabel){
     //winlist[i] holds the pointers to the rows of the dataset where
     //nodes()[i] is the winner
-    std::vector<std::list<const double*> > winLists(som.nodes().size());
+    std::vector<std::list<const GVec*> > winLists(som.nodes().size());
     for(size_t row = 0; row < hData->rows(); ++row){
-      const double* rowVec = hData->row(row);
+      const GVec& rowVec = hData->row(row);
       size_t bestNode = som.bestMatch(rowVec);
-      winLists.at(bestNode).push_back(rowVec);
+      winLists.at(bestNode).push_back(&rowVec);
     }
     //Calculate the variance of the labelCol column for each node
-    std::vector<std::list<const double*> >::const_iterator list;
+    std::vector<std::list<const GVec*> >::const_iterator list;
     for(list=winLists.begin(); list != winLists.end(); ++list){
       if(list->size() == 0){
 	//No elements in the list, no variance
@@ -1328,11 +1324,11 @@ void semanticMap(GArgReader& args){
       }else{
 	//Copy the appropriate column into a 1-column matrix
 	GMatrix m(0,1);
-	std::list<const double*>::const_iterator l;
+	std::list<const GVec*>::const_iterator l;
 	for(l = list->begin(); l != list->end(); ++l){
 	  m.newRow();
-	  double& val = *(m.row(m.rows()-1));
-	  val = (*l)[labelCol];
+	  double& val = (m.row(m.rows()-1))[0];
+	  val = (*(*l))[labelCol];
 	}
 	//Use the matrix to calculate the variance
 	labels.push_back(m.columnVariance(0, m.columnMean(0)));
@@ -1343,9 +1339,9 @@ void semanticMap(GArgReader& args){
     //the input data
     GMatrix* pLessColumns = new GMatrix();
 	pLessColumns->copy(hData.get());
-    Holder<GMatrix> lessColumns(pLessColumns);
+    std::unique_ptr<GMatrix> lessColumns(pLessColumns);
     while(lessColumns->cols() > som.inputDimensions()){
-      lessColumns->deleteColumn(lessColumns->cols()-1);
+      lessColumns->deleteColumns(lessColumns->cols()-1, 1);
     }
     vector<size_t> bestData = som.bestData(lessColumns.get());
 
@@ -1387,7 +1383,7 @@ void makeHistogram(GArgReader& args)
 {
 	// Load the data
 	GMatrix* pData = loadData(args.pop_string());
-	Holder<GMatrix> hData(pData);
+	std::unique_ptr<GMatrix> hData(pData);
 
 	// Parse options
 	size_t wid = 960;
@@ -1417,27 +1413,98 @@ void makeHistogram(GArgReader& args)
 	if(attr >= pData->relation().size())
 		throw Ex("attr out of range");
 
+	// Drop any rows with missing values in column attr
+	for(size_t i = pData->rows() - 1; i < pData->rows(); i--)
+	{
+		if(pData->row(i)[attr] == UNKNOWN_REAL_VALUE)
+			pData->deleteRow(i);
+	}
+
 	// Make the histogram
 	if(pData->relation().valueCount(attr) == 0)
 	{
-		GHistogram hist(*pData, attr, xmin, xmax, wid);
-		double height = (ymax == UNKNOWN_REAL_VALUE ? hist.binLikelihood(hist.modeBin()) * 1.5 : ymax);
-		GSVG svg(wid, hgt);
-		svg.newChart(hist.xmin(), 0.0, hist.xmax(), height);
-		for(double x = hist.xmin(); x <= hist.xmax(); x += svg.hunit())
+		bool use_density_estimation = false;
+		if(pData->rows() < 10000)
+			use_density_estimation = true;
+		
+		if(use_density_estimation)
 		{
-			size_t bin = hist.xToBin(x);
-			double likelihood = hist.binLikelihood(bin);
-			if(likelihood > 0.0)
-				svg.rect(x, 0.0, svg.hunit(), likelihood, 0xff000080);
+			size_t k = std::max((size_t)3, (size_t)sqrt(pData->rows()));
+
+			// Estimate the inverse density at each point
+			pData->sort(attr);
+			double laplace = 2.0 * (pData->row(pData->rows() - 1)[attr] - pData->row(0)[attr]) / pData->rows();
+			GMatrix invDensity(0, 2);
+			GVec& pBlock = invDensity.newRow();
+			pBlock[0] = pData->row(0)[attr];
+			pBlock[1] = 0.0;
+			for(size_t i = k - 1; i < pData->rows(); i++)
+			{
+				double xBegin = pData->row(i + 1 - k)[attr];
+				double xEnd = pData->row(i)[attr];
+				GVec& pBlock2 = invDensity.newRow();
+				pBlock2[0] = 0.5 * (xBegin + xEnd);
+				pBlock2[1] = (double)k / ((xEnd - xBegin + laplace) * pData->rows());
+			}
+			GVec& pBlock3 = invDensity.newRow();
+			pBlock3[0] = pData->row(pData->rows() - 1)[attr];
+			pBlock3[1] = 0.0;
+
+			// Plot it
+			double maxHeight = invDensity.columnMax(1);
+			GSVG svg(wid, hgt);
+			svg.newChart(invDensity[0][0], 0.0, invDensity[invDensity.rows() - 1][0], maxHeight);
+			svg.add_raw("<path d=\"m "); // Start a path
+			svg.add_raw(to_str(invDensity[0][0]).c_str());
+			svg.add_raw(",0 c "); // Turn on control points
+			for(size_t i = 1; i < invDensity.rows(); i++)
+			{
+				// Add the leaving direction control point
+				svg.add_raw(to_str(0.5 * (invDensity[i][0] - invDensity[i - 1][0])).c_str()); // half way to the destination
+				svg.add_raw(",0 "); // horizontal
+
+				// Add the arriving direction control point
+				svg.add_raw(to_str(0.5 * (invDensity[i][0] - invDensity[i - 1][0])).c_str()); // half way to the destination
+				svg.add_raw(",");
+				svg.add_raw(to_str(invDensity[i][1] - invDensity[i - 1][1]).c_str()); // horizontal
+				svg.add_raw(" ");
+
+				// Add the destination point
+				svg.add_raw(to_str(invDensity[i][0] - invDensity[i - 1][0]).c_str());
+				svg.add_raw(",");
+				svg.add_raw(to_str(invDensity[i][1] - invDensity[i - 1][1]).c_str());
+				svg.add_raw(" ");
+			}
+			svg.add_raw("z\" style=\"fill:#0000ff;fill-opacity:0.2\" />\n");
+
+			// Draw the grid
+			svg.horizMarks(30);
+			svg.vertMarks(20);
+
+			// Print it
+			svg.print(cout);
 		}
+		else
+		{
+			GHistogram hist(*pData, attr, xmin, xmax, wid);
+			double height = (ymax == UNKNOWN_REAL_VALUE ? hist.binLikelihood(hist.modeBin()) * 1.5 : ymax);
+			GSVG svg(wid, hgt);
+			svg.newChart(hist.xmin(), 0.0, hist.xmax(), height);
+			for(double x = hist.xmin(); x <= hist.xmax(); x += svg.hunit())
+			{
+				size_t bin = hist.xToBin(x);
+				double likelihood = hist.binLikelihood(bin);
+				if(likelihood > 0.0)
+					svg.rect(x, 0.0, svg.hunit(), likelihood, 0xff000080);
+			}
 
-		// Draw the grid
-		svg.horizMarks(30);
-		svg.vertMarks(20);
+			// Draw the grid
+			svg.horizMarks(30);
+			svg.vertMarks(20);
 
-		// Print it
-		svg.print(cout);
+			// Print it
+			svg.print(cout);
+		}
 	}
 	else
 	{
@@ -1471,7 +1538,7 @@ void PrintStats(GArgReader& args)
 	// Load
 	const char* szFilename = args.pop_string();
 	GMatrix* pData = loadData(szFilename);
-	Holder<GMatrix> hData(pData);
+	std::unique_ptr<GMatrix> hData(pData);
 	GArffRelation* pRel = (GArffRelation*)&pData->relation();
 
 	// Options
@@ -1519,7 +1586,8 @@ void PrintStats(GArgReader& args)
 	for(size_t i = 0; i < pRel->size();)
 	{
 		cout << "  " << i << ") " << pRel->attrName(i) << ", ";
-		if(pRel->valueCount(i) == 0)
+		size_t vals = pRel->valueCount(i);
+		if(vals == 0) // continuous
 		{
 			cout << "Type: Continuous, ";
 			try
@@ -1537,7 +1605,7 @@ void PrintStats(GArgReader& args)
 			}
 			cout << "Missing:" << pData->countValue(i, UNKNOWN_REAL_VALUE) << "\n";
 		}
-		else
+		else if(vals < (size_t)-10)
 		{
 			cout << "Type: Nominal, ";
 			cout << "Values:" << pRel->valueCount(i) << ", ";
@@ -1566,6 +1634,16 @@ void PrintStats(GArgReader& args)
 				cout << " (" << ((double)mostCommonOccurrences * 100.0 / pData->rows()) << "%)\n";
 			}
 		}
+		else if(vals == (size_t)-1) // string;
+		{
+			cout << "Type: String\n";
+		}
+		else if(vals == (size_t)-2) // date;
+		{
+			cout << "Type: Date\n";
+		}
+		else
+			throw Ex("Unexpected number of values");
 		size_t prevI = i;
 		if(i < 2)
 			i++;
@@ -1602,28 +1680,28 @@ void calcError(GArgReader& args){
 	}
 	
 	while(args.size() > 0){
-		double *row = output.newRow();
-		*row = 0.0;
+		GVec& row = output.newRow();
+		row[0] = 0.0;
 		
-		int col1 = args.pop_uint();
-		int col2 = args.pop_uint();
+		size_t col1 = args.pop_uint();
+		size_t col2 = args.pop_uint();
 		
 		if(col1 >= loader.cols() || col2 >= loader.cols())
 			throw Ex("Invalid column.");
 		
-		int dropped = 0;
+		size_t dropped = 0;
 		
-		for(int i = 0; i < loader.rows(); i++){
+		for(size_t i = 0; i < loader.rows(); i++){
 			if(loader[i][col1] == UNKNOWN_REAL_VALUE){
 				dropped++;
 				continue;
 			}
 			
 			if(metric == SSE || metric == RMSE){
-				*row += (loader[i][col1] - loader[i][col2]) * (loader[i][col1] - loader[i][col2]);
+				row[0] += (loader[i][col1] - loader[i][col2]) * (loader[i][col1] - loader[i][col2]);
 			}
 			else if(metric == MAPE){
-				*row += fabs((loader[i][col1] - loader[i][col2]) / loader[i][col1]);
+				row[0] += fabs((loader[i][col1] - loader[i][col2]) / loader[i][col1]);
 			}
 		}
 		
@@ -1631,11 +1709,11 @@ void calcError(GArgReader& args){
 			throw Ex("Invalid data set!");
 		
 		if(metric == MAPE || metric == RMSE)
-			*row /= (loader.rows() - dropped);
+			row[0] /= (loader.rows() - dropped);
 		
 		if(metric == RMSE)
 		{
-			*row = sqrt(*row);
+			row[0] = sqrt(row[0]);
 		}
 	}
 	
@@ -1643,8 +1721,8 @@ void calcError(GArgReader& args){
 }
 
 void percentSame(GArgReader& args){
-  Holder<GMatrix> hData1(loadData(args.pop_string()));
-  Holder<GMatrix> hData2(loadData(args.pop_string()));
+  std::unique_ptr<GMatrix> hData1(loadData(args.pop_string()));
+  std::unique_ptr<GMatrix> hData2(loadData(args.pop_string()));
   const size_t cols = hData1->cols();
   const size_t rows = hData1->rows();
   if(hData1->cols() != hData2->cols()){
@@ -1685,8 +1763,8 @@ void percentSame(GArgReader& args){
   //Count the same values
   vector<size_t> numSame(cols, 0);
   for(size_t row = 0; row < rows; ++row){
-    const double *r1 = hData1->row(row);
-    const double *r2 = hData2->row(row);
+    const GVec& r1 = hData1->row(row);
+    const GVec& r2 = hData2->row(row);
     for(size_t col = 0; col < cols; ++col){
       if(r1[col] == r2[col]){ ++numSame[col]; }
     }
@@ -1715,7 +1793,7 @@ void printDecisionTree(GArgReader& args)
 	doc.loadJson(args.pop_string());
 	GLearnerLoader ll(true);
 	GSupervisedLearner* pModeler = ll.loadLearner(doc.root());
-	Holder<GSupervisedLearner> hModeler(pModeler);
+	std::unique_ptr<GSupervisedLearner> hModeler(pModeler);
 	while(pModeler->isFilter())
 		pModeler = ((GFilter*)pModeler)->innerLearner();
 
@@ -1747,7 +1825,7 @@ void printRandomForest(GArgReader& args)
 	doc.loadJson(args.pop_string());
 	GLearnerLoader ll(true);
 	GSupervisedLearner* pModeler = ll.loadLearner(doc.root());
-	Holder<GSupervisedLearner> hModeler(pModeler);
+	std::unique_ptr<GSupervisedLearner> hModeler(pModeler);
 	while(pModeler->isFilter())
 		pModeler = ((GFilter*)pModeler)->innerLearner();
 
@@ -1776,7 +1854,7 @@ void ShowUsage(const char* appName)
 	cout << "<Angled brackets> are used to indicate optional arguments.\n";
 	cout << "\n";
 	UsageNode* pUsageTree = makePlotUsageTree();
-	Holder<UsageNode> hUsageTree(pUsageTree);
+	std::unique_ptr<UsageNode> hUsageTree(pUsageTree);
 	pUsageTree->print(cout, 0, 3, 76, 1000, true);
 	cout.flush();
 }
@@ -1788,7 +1866,7 @@ void showError(GArgReader& args, const char* szAppName, const char* szMessage)
 	args.set_pos(1);
 	const char* szCommand = args.peek();
 	UsageNode* pUsageTree = makePlotUsageTree();
-	Holder<UsageNode> hUsageTree(pUsageTree);
+	std::unique_ptr<UsageNode> hUsageTree(pUsageTree);
 	if(szCommand)
 	{
 		UsageNode* pUsageCommand = pUsageTree->choice(szCommand);

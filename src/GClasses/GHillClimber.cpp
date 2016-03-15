@@ -98,6 +98,15 @@ double GMomentumGreedySearch::iterateOneDim()
 	return iterateOneDim();
 }
 
+#ifndef MIN_PREDICT
+// static
+void GMomentumGreedySearch::test()
+{
+	GOptimizerBasicTestTargetFunction target;
+	GMomentumGreedySearch opt(&target);
+	opt.basicTest(1e-32);
+}
+#endif
 
 // --------------------------------------------------------------------------------
 
@@ -241,12 +250,22 @@ double GHillClimber::anneal(double dev, GRand* pRand)
 	return m_dError;
 }
 
+#ifndef MIN_PREDICT
+// static
+void GHillClimber::test()
+{
+	GOptimizerBasicTestTargetFunction target;
+	GHillClimber opt(&target);
+	opt.basicTest(1.39e-17);
+}
+#endif
+
 
 // --------------------------------------------------------------------------------
 
 
-GAnnealing::GAnnealing(GTargetFunction* pTargetFunc, double initialDeviation, double decay, GRand* pRand)
-: GOptimizer(pTargetFunc), m_initialDeviation(initialDeviation), m_decay(decay), m_pRand(pRand)
+GAnnealing::GAnnealing(GTargetFunction* pTargetFunc, GRand* pRand)
+: GOptimizer(pTargetFunc), m_initialDeviation(1.0), m_pRand(pRand)
 {
 	if(!pTargetFunc->relation()->areContinuous(0, pTargetFunc->relation()->size()))
 		throw Ex("Discrete attributes are not supported");
@@ -272,19 +291,106 @@ void GAnnealing::reset()
 
 /*virtual*/ double GAnnealing::iterate()
 {
-	if(!m_pCritic->isStable())
-		m_dError = m_pCritic->computeError(m_pVector);
-	for(size_t i = 0; i < m_dims; i++)
-		m_pCandidate[i] = m_pVector[i] + m_pRand->normal() * m_deviation;
-	double cand = m_pCritic->computeError(m_pCandidate);
-	if(cand < m_dError)
+	for(size_t j = 0; j < 5; j++)
 	{
-		std::swap(m_pVector, m_pCandidate);
-		m_dError = cand;
+		if(!m_pCritic->isStable())
+			m_dError = m_pCritic->computeError(m_pVector);
+		for(size_t i = 0; i < m_dims; i++)
+			m_pCandidate[i] = m_pVector[i] + m_pRand->normal() * m_deviation;
+		double cand = m_pCritic->computeError(m_pCandidate);
+		if(cand < m_dError)
+		{
+			std::swap(m_pVector, m_pCandidate);
+			m_dError = cand;
+			m_deviation *= 1.5;
+		}
+		m_deviation *= 0.95;
+		if(m_deviation < 1e-14)
+			m_deviation = m_initialDeviation;
 	}
-	m_deviation *= m_decay;
 	return m_dError;
 }
+
+#ifndef MIN_PREDICT
+// static
+void GAnnealing::test()
+{
+	GRand rand(0);
+	GOptimizerBasicTestTargetFunction target;
+	GAnnealing opt(&target, &rand);
+	opt.basicTest(0.00017);
+}
+#endif
+
+// --------------------------------------------------------------------------------
+
+
+GRandomDirectionBinarySearch::GRandomDirectionBinarySearch(GTargetFunction* pTargetFunc, GRand* pRand)
+: GOptimizer(pTargetFunc), m_stepSize(1e-6), m_pRand(pRand)
+{
+	if(!pTargetFunc->relation()->areContinuous(0, pTargetFunc->relation()->size()))
+		throw Ex("Discrete attributes are not supported");
+	m_dims = pTargetFunc->relation()->size();
+	m_current.resize(m_dims);
+	m_direction.resize(m_dims);
+	m_current.fill(0.0);
+	m_err = m_pCritic->computeError(m_current.data());
+}
+
+// virtual
+GRandomDirectionBinarySearch::~GRandomDirectionBinarySearch()
+{
+}
+
+// virtual
+double GRandomDirectionBinarySearch::iterate()
+{
+	m_pRand->spherical(m_direction.data(), m_dims);
+	double sum = 0.0;
+	for(size_t i = 0; i < 20; i++)
+	{
+		GVec::addScaled(m_current.data(), m_stepSize, m_direction.data(), m_dims);
+		double pos = m_pCritic->computeError(m_current.data());
+		if(pos < m_err)
+		{
+			sum += m_stepSize;
+			m_stepSize *= 1.189207115; // pow(2.0, 0.25)
+			m_err = pos;
+		}
+		else
+		{
+			GVec::addScaled(m_current.data(), -2.0 * m_stepSize, m_direction.data(), m_dims);
+			double neg = m_pCritic->computeError(m_current.data());
+			if(neg < m_err)
+			{
+				sum -= m_stepSize;
+				m_stepSize *= -1.189207115; // pow(2.0, 0.25)
+				m_err = neg;
+			}
+			else
+			{
+				GVec::addScaled(m_current.data(), m_stepSize, m_direction.data(), m_dims);
+				m_stepSize *= 0.5;
+				if(m_stepSize < 1e-16)
+					m_stepSize = 1.0; // No progress. Might as well try something new.
+			}
+		}
+	}
+	m_stepSize = sum;
+	return m_err;
+}
+
+#ifndef MIN_PREDICT
+// static
+void GRandomDirectionBinarySearch::test()
+{
+	GRand rand(0);
+	GOptimizerBasicTestTargetFunction target;
+	GRandomDirectionBinarySearch opt(&target, &rand);
+	opt.basicTest(1.92e-05);
+}
+#endif
+
 
 
 // --------------------------------------------------------------------------------

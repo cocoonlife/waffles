@@ -45,8 +45,8 @@ protected:
 	size_t m_neighborCount;
 
 public:
-	GNeighborFinder(const GMatrix* pData, size_t neighborCount)
-	: m_pData(pData), m_neighborCount(neighborCount)
+	GNeighborFinder(const GMatrix* pData, size_t neighs)
+	: m_pData(pData), m_neighborCount(neighs)
 	{
 	}
 
@@ -187,7 +187,7 @@ public:
 	/// if you want them to be sorted.
 	/// If there are not enough points in the data set to fill the
 	/// neighbor array, the empty ones will have an index of INVALID_INDEX.
-	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const double* pInputVector) = 0;
+	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const GVec& inputVector) = 0;
 
 	using GNeighborFinder::neighbors;
 };
@@ -211,7 +211,7 @@ public:
 	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, size_t index);
 
 	/// See the comment for GNeighborFinderGeneralizing::neighbors
-	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const double* pInputVector);
+	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const GVec& inputVector);
 };
 
 
@@ -245,7 +245,7 @@ public:
 	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, size_t index);
 
 	/// See the comment for GNeighborFinderGeneralizing::neighbors
-	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const double* pInputVector);
+	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const GVec& inputVector);
 
 	/// Specify the max number of point-vectors to store in each leaf node.
 	void setMaxLeafSize(size_t n) { m_maxLeafSize = n; }
@@ -264,7 +264,7 @@ public:
 
 protected:
 	/// This is the helper method that finds the neighbors
-	void findNeighbors(size_t* pOutNeighbors, double* pOutDistances, const double* pInputVector, size_t nExclude);
+	void findNeighbors(size_t* pOutNeighbors, double* pOutDistances, const GVec& inputVector, size_t nExclude);
 
 	/// Computes a good pivot for the specified attribute, and the goodness of splitting on
 	/// that attribute. For continuous attributes, the pivot is the (not scaled) mean and the goodness is
@@ -310,7 +310,7 @@ public:
 	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, size_t index);
 
 	/// See the comment for GNeighborFinderGeneralizing::neighbors
-	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const double* pInputVector);
+	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, const GVec& inputVector);
 
 	/// Specify the max number of point-vectors to store in each leaf node.
 	void setMaxLeafSize(size_t n) { m_maxLeafSize = n; }
@@ -337,7 +337,7 @@ protected:
 	GBallNode* buildTree(size_t count, size_t* pIndexes);
 
 	/// This is the helper method that finds the neighbors
-	void findNeighbors(size_t* pOutNeighbors, double* pOutDistances, const double* pInputVector, size_t nExclude);
+	void findNeighbors(size_t* pOutNeighbors, double* pOutDistances, const GVec& inputVector, size_t nExclude);
 };
 
 
@@ -433,46 +433,6 @@ protected:
 	bool doAnyBigAtomicCyclesExist();
 };
 
-
-
-
-/// This class implementes the SAFFRON intelligent neighbor-finding algorithm published in
-/// Gashler, Michael S. and Martinez, Tony. Tangent space guided intelligent neighbor finding.
-/// In Proceedings of the IEEE International Joint Conference on Neural Networks IJCNN’11,
-/// pages 2617–2624, IEEE Press, 2011.
-/// This class intelligently selects neighbors for each point in a dataset, such that the neighbors
-/// define a good neighborhood for manifold learning. A relaxation technique is used to ensure
-/// that neighbors lie on a consistent tangent-space while remaining close to the point. This makes
-/// manifold learning possible with difficult (somtimes even self-intersecting) manifolds.
-class GSaffron : public GNeighborFinder
-{
-protected:
-	size_t* m_pNeighborhoods;
-	double* m_pDistances;
-	size_t m_rows;
-	double m_learningRate;
-	int m_windowSize;
-	double m_minImprovement;
-	bool m_prune;
-
-public:
-	/// General-purpose constructor
-	GSaffron(GMatrix* pData, size_t medianCands, size_t neighbors, size_t tangentDims, double sqCorrCap, GRand* pRand);
-	virtual ~GSaffron();
-
-	/// See the comment for GNeighborFinder::neighbors
-	virtual void neighbors(size_t* pOutNeighbors, size_t index);
-
-	/// See the comment for GNeighborFinder::neighbors
-	virtual void neighbors(size_t* pOutNeighbors, double* pOutDistances, size_t index);
-
-	/// Returns the mean number of neighbors for each point. If pDeviation is non-NULL,
-	/// it is set to the deviation.
-	double meanNeighborCount(double* pDeviation);
-
-protected:
-	static double measureAlignment(double* pA, GMatrix* pATan, double* pB, GMatrix* pBTan, double cap, double squaredRadius, GRand* pRand);
-};
 
 
 

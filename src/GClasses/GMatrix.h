@@ -26,6 +26,7 @@
 #include <iostream>
 
 #include "GError.h"
+#include "GVec.h"
 
 
 namespace GClasses {
@@ -100,7 +101,7 @@ public:
 	virtual GRelation* cloneSub(size_t start, size_t count) const = 0;
 
 	/// \brief Deletes the specified attribute
-	virtual void deleteAttribute(size_t index) = 0;
+	virtual void deleteAttributes(size_t index, size_t count) = 0;
 
 	/// \brief Swaps two attributes
 	virtual void swapAttributes(size_t nAttr1, size_t nAttr2) = 0;
@@ -151,7 +152,7 @@ public:
 	void fromRealSpace(const double* pIn, GPrediction* pOut, size_t nFirstAttr, size_t nAttrCount) const;
 
 	/// \brief Load from a DOM.
-	static GRelation* deserialize(GDomNode* pNode);
+	static GRelation* deserialize(const GDomNode* pNode);
 
 	/// \brief Saves to a file
 	void save(const GMatrix* pData, const char* szFilename, size_t precision) const;
@@ -175,12 +176,12 @@ protected:
 	size_t m_valueCount;
 
 public:
-	GUniformRelation(size_t attrCount, size_t valueCount = 0)
-	: m_attrCount(attrCount), m_valueCount(valueCount)
+	GUniformRelation(size_t attrCount, size_t values = 0)
+	: m_attrCount(attrCount), m_valueCount(values)
 	{
 	}
 
-	GUniformRelation(GDomNode* pNode);
+	GUniformRelation(const GDomNode* pNode);
 
 	virtual RelationType type() const { return UNIFORM; }
 
@@ -211,7 +212,7 @@ public:
 	virtual GRelation* cloneSub(size_t, size_t count) const { return new GUniformRelation(count, m_valueCount); }
 
 	/// \brief Drop the specified attribute
-	virtual void deleteAttribute(size_t index);
+	virtual void deleteAttributes(size_t index, size_t count);
 
 	/// \brief Swap two attributes (since all attributes are identical, does nothing)
 	virtual void swapAttributes(size_t, size_t) {}
@@ -238,7 +239,7 @@ public:
 	GMixedRelation(std::vector<size_t>& attrValues);
 
 	/// \brief Loads from a DOM.
-	GMixedRelation(GDomNode* pNode);
+	GMixedRelation(const GDomNode* pNode);
 
 	/// \brief Makes a copy of pCopyMe
 	GMixedRelation(const GRelation* pCopyMe);
@@ -315,7 +316,7 @@ public:
 	virtual void swapAttributes(size_t nAttr1, size_t nAttr2);
 
 	/// \brief Deletes an attribute.
-	virtual void deleteAttribute(size_t nAttr);
+	virtual void deleteAttributes(size_t nAttr, size_t count);
 };
 
 
@@ -344,7 +345,7 @@ public:
 	GArffRelation();
 
 	/// Deserializing constructor
-	GArffRelation(GDomNode* pNode);
+	GArffRelation(const GDomNode* pNode);
 
 	virtual ~GArffRelation();
 
@@ -426,7 +427,7 @@ public:
 	virtual void swapAttributes(size_t nAttr1, size_t nAttr2);
 
 	/// \brief Deletes an attribute
-	virtual void deleteAttribute(size_t nAttr);
+	virtual void deleteAttributes(size_t nAttr, size_t count);
 
 	/// \brief Returns the nominal index for the specified attribute
 	/// with the given value
@@ -454,7 +455,7 @@ class GMatrix
 {
 protected:
 	GRelation* m_pRelation;
-	std::vector<double*> m_rows;
+	std::vector<GVec*> m_rows;
 
 public:
 	/// \brief Makes an empty 0x0 matrix.
@@ -513,7 +514,7 @@ public:
 
 
 	/// \brief Load from a DOM.
-	GMatrix(GDomNode* pNode);
+	GMatrix(const GDomNode* pNode);
 
 	~GMatrix();
 
@@ -542,8 +543,8 @@ public:
 	void resizePreserve(size_t rowCount, size_t colCount);
 
 	/// \brief Adds a new row to the matrix. (The values in the row are
-	/// not initialized.) Returns a pointer to the new row.
-	double* newRow();
+	/// not initialized.) Returns a reference to the new row.
+	GVec& newRow();
 
 	/// \brief Adds 'n' new columns to the matrix. (This resizes every row and copies all the
 	/// existing data, which is rather inefficient.) The values in the new columns are not initialized.
@@ -557,7 +558,7 @@ public:
 	/// Adds the values in pThat to this. (If transpose is true, adds
 	/// the transpose of pThat to this.) Both datasets must have the
 	/// same dimensions. Behavior is undefined for nominal columns.
-	void add(const GMatrix* pThat, bool transpose);
+	void add(const GMatrix* pThat, bool transpose = false);
 
 	/// \brief Copies the specified range of columns (including meta-data) from that matrix into this matrix,
 	/// replacing all data currently in this matrix.
@@ -574,7 +575,7 @@ public:
 	/// Behavior is undefined if there are nominal attributes. If
 	/// tolerant is true, it will return even if it cannot compute
 	/// accurate results. If tolerant is false (the default) and this
-	/// matrix is not positive definate, it will throw an exception.
+	/// matrix is not positive definite, it will throw an exception.
 	GMatrix* cholesky(bool tolerant = false);
 
 	/// \brief Makes a deep copy of the specified rectangular region of
@@ -587,9 +588,6 @@ public:
 	/// \brief Returns the number of columns in the dataset
 	size_t cols() const { return m_pRelation->size(); }
 
-	/// \brief Adds a copy of the row to the data set
-	void copyRow(const double* pRow);
-
 	/// \brief Computes the determinant of this matrix
 	double determinant();
 
@@ -600,7 +598,7 @@ public:
 
 	/// \brief Computes the eigenvalue that corresponds to the specified
 	/// eigenvector of this matrix
-	double eigenValue(const double* pEigenVector);
+	double eigenValue(const GVec& eigenVector);
 
 	/// \brief Computes the eigenvector that corresponds to the
 	/// specified eigenvalue of this matrix. Note that this method
@@ -684,7 +682,7 @@ public:
 	/// If mostSignificant is true, the largest eigenvalues are
 	/// found. If mostSignificant is false, the smallest eigenvalues are
 	/// found.
-	GMatrix* eigs(size_t nCount, double* pEigenVals, GRand* pRand, bool mostSignificant);
+	GMatrix* eigs(size_t nCount, GVec& eigenVals, GRand* pRand, bool mostSignificant);
 
 	/// \brief Multiplies every element in the dataset by scalar.
 	/// Behavior is undefined for nominal columns.
@@ -705,7 +703,7 @@ public:
 	///
 	/// \note if transpose is true, then pVectorIn is treated as a
 	/// row vector and is multiplied by this matrix to get pVectorOut.
-	void multiply(const double* pVectorIn, double* pVectorOut, bool transpose = false) const;
+	void multiply(const GVec& vectorIn, GVec& vectorOut, bool transpose = false) const;
 
 	/// \brief Matrix multiply.
 	///
@@ -777,7 +775,8 @@ public:
 	double sumSquaredDiffWithIdentity();
 
 	/// \brief Adds an already-allocated row to this dataset.
-	void takeRow(double* pRow);
+	/// If pos is specified, the new row will be inserted and the speicified position.
+	void takeRow(GVec* pRow, size_t pos = (size_t)-1);
 
 	/// \brief Converts the matrix to reduced row echelon form
 	size_t toReducedRowEchelonForm();
@@ -813,16 +812,16 @@ public:
 	void fromVector(const double* pVector, size_t nRows);
 
 	/// \brief Returns a pointer to the specified row
-	inline double* row(size_t index) { return m_rows[index]; }
+	inline GVec& row(size_t index) { return *m_rows[index]; }
 
 	/// \brief Returns a const pointer to the specified row
-	inline const double* row(size_t index) const { return m_rows[index]; }
+	inline const GVec& row(size_t index) const { return *m_rows[index]; }
 
 	/// \brief Returns a pointer to the specified row
-	inline double* operator [](size_t index) { return m_rows[index]; }
+	inline GVec& operator [](size_t index) { return *m_rows[index]; }
 
 	/// \brief Returns a const pointer to the specified row
-	inline const double* operator [](size_t index) const { return m_rows[index]; }
+	inline const GVec& operator [](size_t index) const { return *m_rows[index]; }
 
 	/// \brief Sets all elements in the specified range of columns to the specified value.
 	/// If no column ranges are specified, the default is to set all of them.
@@ -835,22 +834,22 @@ public:
 	void swapRows(size_t a, size_t b);
 
 	/// \brief Swap pNewRow in for row i, and return row i. The caller is then responsible to delete the row that is returned.
-	double* swapRow(size_t i, double* pNewRow);
+	GVec* swapRow(size_t i, GVec* pNewRow);
 
 	/// \brief Swaps two columns
 	void swapColumns(size_t nAttr1, size_t nAttr2);
 
-	/// \brief Deletes a column.
+	/// \brief Deletes some columns.
 	/// This does not reallocate the rows, but it does shift the elements,
 	/// which is a slow operation, especially if there are many columns
-	/// that follow the one being deleted.
-	void deleteColumn(size_t index);
+	/// that follow those being deleted.
+	void deleteColumns(size_t index, size_t count);
 
 	/// \brief Swaps the specified row with the last row, and then
 	/// releases it from the dataset.
 	///
 	/// The caller is responsible to delete the row (array of doubles) this method returns.
-	double* releaseRow(size_t index);
+	GVec* releaseRow(size_t index);
 
 	/// \brief Swaps the specified row with the last row, and then deletes it.
 	void deleteRow(size_t index);
@@ -859,7 +858,7 @@ public:
 	/// everything after it up one slot.
 	///
 	/// The caller is responsible to delete the row this method returns.
-	double* releaseRowPreserveOrder(size_t index);
+	GVec* releaseRowPreserveOrder(size_t index);
 
 	/// \brief Deletes the specified row and shifts everything after it up one slot
 	void deleteRowPreserveOrder(size_t index);
@@ -958,7 +957,10 @@ public:
 	/// or else return UNKNOWN_REAL_VALUE.
 	double columnMean(size_t nAttribute, const double* pWeights = NULL, bool throwIfEmpty = true) const;
 
-	/// \brief Computes the average variance of a single attribute
+	/// Returns the squared magnitude of the vector in the specified column.
+	double columnSquaredMagnitude(size_t col) const;
+
+	/// \brief Computes the sample variance of a single attribute
 	double columnVariance(size_t nAttr, double mean) const;
 
 #ifndef MIN_PREDICT
@@ -975,7 +977,7 @@ public:
 
 	/// \brief Computes the arithmetic means of all attributes
 	/// If pWeights is non-NULL, then it is assumed to be a vector of weights, one for each row in this matrix.
-	void centroid(double* pOutCentroid, const double* pWeights = NULL) const;
+	void centroid(GVec& outCentroid, const double* pWeights = NULL) const;
 
 	/// \brief Normalizes the specified column
 	void normalizeColumn(size_t col, double dInMin, double dInMax, double dOutMin = 0.0, double dOutMax = 1.0);
@@ -1023,20 +1025,20 @@ public:
 	/// The size of pOutVector will be the number of columns in this matrix.
 	/// (To compute the next principal component, call RemoveComponent,
 	/// then call this method again.)
-	void principalComponent(double* pOutVector, const double* pMean, GRand* pRand) const;
+	void principalComponent(GVec& outVector, const GVec& centroid, GRand* pRand) const;
 
 	/// \brief Computes the first principal component assuming the mean
 	/// is already subtracted out of the data
-	void principalComponentAboutOrigin(double* pOutVector, GRand* pRand) const;
+	void principalComponentAboutOrigin(GVec& outVector, GRand* pRand) const;
 
 	/// \brief Computes principal components, while ignoring missing
 	/// values
-	void principalComponentIgnoreUnknowns(double* pOutVector, const double* pMean, GRand* pRand) const;
+	void principalComponentIgnoreUnknowns(GVec& outVector, const GVec& centroid, GRand* pRand) const;
 
 	/// \brief Computes the first principal component of the data with
 	/// each row weighted according to the vector pWeights. (pWeights
 	/// must have an element for each row.)
-	void weightedPrincipalComponent(double* pOutVector, const double* pMean, const double* pWeights, GRand* pRand) const;
+	void weightedPrincipalComponent(GVec& outVector, const GVec& centroid, const double* pWeights, GRand* pRand) const;
 
 	/// \brief Computes the eigenvalue that corresponds to \a *pEigenvector.
 	///
@@ -1051,10 +1053,10 @@ public:
 	/// This might be useful, for example, to remove the first principal
 	/// component from the data so you can then proceed to compute the
 	/// second principal component, and so forth.
-	void removeComponent(const double* pMean, const double* pComponent);
+	void removeComponent(const GVec& centroid, const GVec& component);
 
 	/// \brief Removes the specified component assuming the mean is zero.
-	void removeComponentAboutOrigin(const double* pComponent);
+	void removeComponentAboutOrigin(const GVec& component);
 
 	/// \brief Computes the minimum number of principal components
 	/// necessary so that less than the specified portion of the
@@ -1077,7 +1079,7 @@ public:
 	///       the mean after removing the corresponding component, and
 	///       then dividing by the number of dimensions. This is more
 	///       efficient than calling eigenValue.
-	double sumSquaredDistance(const double* pPoint) const;
+	double sumSquaredDistance(const GVec& point) const;
 
 	/// \brief Computes the sum-squared distance between the specified
 	/// column of this and that. If the column is a nominal attribute,
@@ -1100,7 +1102,7 @@ public:
 	/// \brief Finds a sphere that tightly bounds all the points in the specified vector of row-indexes.
 	///
 	/// Returns the squared radius of the sphere, and stores its center in pOutCenter.
-	double boundingSphere(double* pOutCenter, size_t* pIndexes, size_t indexCount, GDistanceMetric* pMetric) const;
+	double boundingSphere(GVec& outCenter, size_t* pIndexes, size_t indexCount, GDistanceMetric* pMetric) const;
 
 	/// \brief Computes the covariance between two attributes.
 	/// If pWeights is NULL, each row is given a weight of 1.
@@ -1153,7 +1155,7 @@ public:
 	///
 	/// Returns false if the subspaces are so nearly parallel that pOut
 	/// cannot be computed with accuracy.
-	bool leastCorrelatedVector(double* pOut, const GMatrix* pThat, GRand* pRand) const;
+	bool leastCorrelatedVector(GVec& out, const GMatrix* pThat, GRand* pRand) const;
 
 	/// \brief Computes the cosine of the dihedral angle between this
 	/// subspace and pThat subspace
@@ -1163,11 +1165,11 @@ public:
 	/// defines one of the orthonormal basis vectors of this hyperplane)
 	///
 	/// This computes (A^T)Ap, where A is this matrix, and p is pPoint.
-	void project(double* pDest, const double* pPoint) const;
+//	void project(double* pDest, const double* pPoint) const;
 
 	/// \brief Projects pPoint onto this hyperplane (where each row
 	/// defines one of the orthonormal basis vectors of this hyperplane)
-	void project(double* pDest, const double* pPoint, const double* pOrigin) const;
+//	void project(double* pDest, const double* pPoint, const double* pOrigin) const;
 
 	/// \brief Performs a bipartite matching between the rows of \a a
 	/// and \a b using the Linear Assignment Problem (LAP) optimizer
@@ -1274,6 +1276,7 @@ public:
 	void setMaxVals(size_t n) { m_maxVals = n; }
 
 	/// Specify that a certain attribute should be expected to be a date or time stamp that follows a given format.
+	/// For example, szFormat might be "YYYY-MM-DD hh:mm:ss".
 	void setTimeFormat(size_t attr, const char* szFormat);
 
 	/// Indiciate that the specified attribute should be treated as nominal.
@@ -1320,6 +1323,7 @@ public:
 		m_pData = pData;
 	}
 };
+
 
 /// \brief This class guarantees that the rows in b are merged
 /// vertically back into a when this object goes out of scope.

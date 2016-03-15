@@ -31,7 +31,7 @@ class GTransform
 {
 public:
 	GTransform();
-	GTransform(GDomNode* pNode, GLearnerLoader& ll);
+	GTransform(const GDomNode* pNode);
 	virtual ~GTransform();
 
 	/// Applies the transformation to pIn and returns the results.
@@ -52,11 +52,11 @@ class GIncrementalTransform : public GTransform
 private:
 	GRelation* m_pRelationBefore;
 	GRelation* m_pRelationAfter;
-	double* m_pInnerBuf;
+	GVec m_innerBuf;
 
 public:
-	GIncrementalTransform() : GTransform(), m_pRelationBefore(NULL), m_pRelationAfter(NULL), m_pInnerBuf(NULL) {}
-	GIncrementalTransform(GDomNode* pNode, GLearnerLoader& ll);
+	GIncrementalTransform() : GTransform(), m_pRelationBefore(NULL), m_pRelationAfter(NULL) {}
+	GIncrementalTransform(const GDomNode* pNode);
 	virtual ~GIncrementalTransform();
 
 #ifndef MIN_PREDICT
@@ -100,7 +100,7 @@ public:
 	/// pIn is the source row. pOut is a buffer that will hold the
 	/// transformed row.  train must be called before this method
 	/// is used
-	virtual void transform(const double* pIn, double* pOut) = 0;
+	virtual void transform(const GVec& in, GVec& out) = 0;
 
 	/// This calls train, then calls transformBatch, and returns the result.
 	virtual GMatrix* reduce(const GMatrix& in);
@@ -114,21 +114,21 @@ public:
 	/// Returns a buffer of sufficient size to store an inner
 	/// (transformed) vector. The caller should not to delete
 	/// the buffer. The same buffer will be returned each time.
-	double* innerBuf();
+	GVec& innerBuf();
 
 	/// pIn is a previously transformed row, and pOut is a buffer that will hold the untransformed row.
 	/// train must be called before this method is used.
 	/// This method may throw an exception if this transformation cannot be undone or approximately undone.
-	virtual void untransform(const double* pIn, double* pOut) = 0;
+	virtual void untransform(const GVec& in, GVec& out) = 0;
 
 #ifndef MIN_PREDICT
 	/// Similar to untransform, except it produces a distribution instead of just a vector.
 	/// This method may not be implemented in all classes, so it may throw an exception.
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut) = 0;
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut) = 0;
 #endif // MIN_PREDICT
 
 	/// This assumes train was previously called, and untransforms all the rows in pIn and returns the results.
-	virtual GMatrix* untransformBatch(const GMatrix& in);
+	virtual std::unique_ptr<GMatrix> untransformBatch(const GMatrix& in);
 
 protected:
 	/// Child classes should use this in their implementation of serialize
@@ -167,7 +167,7 @@ public:
 	GIncrementalTransformChainer(GIncrementalTransform* pFirst, GIncrementalTransform* pSecond);
 
 	/// Deserializing constructor
-	GIncrementalTransformChainer(GDomNode* pNode, GLearnerLoader& ll);
+	GIncrementalTransformChainer(const GDomNode* pNode, GLearnerLoader& ll);
 	virtual ~GIncrementalTransformChainer();
 
 #ifndef MIN_PREDICT
@@ -176,14 +176,14 @@ public:
 #endif // MIN_PREDICT
 
 	/// See the comment for GIncrementalTransform::train
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 #ifndef MIN_PREDICT
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 #endif // MIN_PREDICT
 
 protected:
@@ -208,7 +208,7 @@ protected:
 	size_t m_targetDims;
 	GMatrix* m_pBasisVectors;
 	GMatrix* m_pCentroid;
-	double* m_pEigVals;
+	GVec m_eigVals;
 	bool m_aboutOrigin;
 	GRand m_rand;
 
@@ -216,7 +216,7 @@ public:
 	GPCA(size_t targetDims);
 
 	/// Load from a DOM.
-	GPCA(GDomNode* pNode, GLearnerLoader& ll);
+	GPCA(const GDomNode* pNode);
 
 	virtual ~GPCA();
 
@@ -234,13 +234,13 @@ public:
 	void aboutOrigin() { m_aboutOrigin = true; }
 
 	/// Returns the eigenvalues. Returns NULL if computeEigVals was not called.
-	double* eigVals() { return m_pEigVals; }
+	GVec& eigVals() { return m_eigVals; }
 
 	/// Returns the number of principal components that it will find.
 	size_t targetDims() { return m_targetDims; }
 
 	/// Returns the centroid about which the principal components were calculated.
-	double* centroid() { return m_pCentroid->row(0); }
+	GVec& centroid() { return m_pCentroid->row(0); }
 
 	/// Returns the matrix of basis vectors. Row 0 is the first principal component,
 	/// row 1 is the second principal component, and so forth.
@@ -252,14 +252,14 @@ public:
 
 	/// See the comment for GIncrementalTransform::transform.
 	/// Projects the specified point into fewer dimensions.
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// Computes a (lossy) high-dimensional point that corresponds with the
 	/// specified low-dimensional coordinates.
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 
 	/// Returns a reference to the pseudo-random number generator used by this object.
 	GRand& rand() { return m_rand; }
@@ -272,20 +272,6 @@ protected:
 };
 
 
-/// Principle Component Analysis without the projection. It only rotates
-/// axes to align with the first few principal components.
-class GPCARotateOnly
-{
-public:
-	/// This rotates the data to align the first nComponents axes with the same
-	/// number of principle components.
-	static GMatrix* transform(size_t nDims, size_t nOutputs, const GMatrix* pData, size_t nComponents, GRand* pRand);
-
-#ifndef MIN_PREDICT
-	/// Performs unit tests for this class. Throws an exception if there is a failure.
-	static void test();
-#endif // MIN_PREDICT
-};
 
 
 /// Just generates Gaussian noise
@@ -299,7 +285,7 @@ public:
 	GNoiseGenerator();
 
 	/// Load from a DOM.
-	GNoiseGenerator(GDomNode* pNode, GLearnerLoader& ll);
+	GNoiseGenerator(const GDomNode* pNode);
 
 	virtual ~GNoiseGenerator();
 
@@ -307,17 +293,17 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// Sets the mean and deviation of the noise
 	void setMeanAndDeviation(double m, double d) { m_mean = m; m_deviation = d; }
 
 	/// Throws an exception (because this transform cannot be reversed).
-	virtual void untransform(const double* pIn, double* pOut)
+	virtual void untransform(const GVec& in, GVec& out)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 	/// Throws an exception (because this transform cannot be undone).
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut)
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 	/// Returns a reference to the rand object used to generate noise.
@@ -344,7 +330,7 @@ public:
 	GPairProduct(size_t nMaxDims);
 
 	/// Load from a DOM.
-	GPairProduct(GDomNode* pNode, GLearnerLoader& ll);
+	GPairProduct(const GDomNode* pNode);
 
 	virtual ~GPairProduct();
 
@@ -352,14 +338,14 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// Throws an exception (because this transform cannot be reversed).
-	virtual void untransform(const double* pIn, double* pOut)
+	virtual void untransform(const GVec& in, GVec& out)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 	/// Throws an exception (because this transform cannot be undone).
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut)
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 protected:
@@ -388,7 +374,7 @@ public:
 	GReservoir(double weightDeviation = 2.0, size_t outputs = 64, size_t hiddenLayers = 2);
 
 	/// Load from a DOM.
-	GReservoir(GDomNode* pNode, GLearnerLoader& ll);
+	GReservoir(const GDomNode* pNode);
 
 	virtual ~GReservoir();
 
@@ -398,14 +384,14 @@ public:
 #endif // MIN_PREDICT
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// Throws an exception (because this transform cannot be reversed).
-	virtual void untransform(const double* pIn, double* pOut)
+	virtual void untransform(const GVec& in, GVec& out)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 	/// Throws an exception (because this transform cannot be undone).
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut)
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 protected:
@@ -432,7 +418,7 @@ public:
 	GDataAugmenter(GIncrementalTransform* pTransform);
 
 	/// Load from a DOM
-	GDataAugmenter(GDomNode* pNode, GLearnerLoader& ll);
+	GDataAugmenter(const GDomNode* pNode, GLearnerLoader& ll);
 
 	virtual ~GDataAugmenter();
 
@@ -442,13 +428,13 @@ public:
 #endif // MIN_PREDICT
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 	/// Throws an exception
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 
 protected:
 	/// See the comment for GIncrementalTransform::train
@@ -477,7 +463,7 @@ public:
 	{
 	}
 
-	GAttributeSelector(GDomNode* pNode, GLearnerLoader& ll);
+	GAttributeSelector(const GDomNode* pNode);
 
 	virtual ~GAttributeSelector()
 	{
@@ -488,7 +474,7 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// Specifies the number of features to select. (This method must be called
 	/// after train.)
@@ -499,11 +485,11 @@ public:
 	std::vector<size_t>& ranks() { return m_ranks; }
 
 	/// Throws an exception (because this transform cannot be reversed).
-	virtual void untransform(const double* pIn, double* pOut)
+	virtual void untransform(const GVec& in, GVec& out)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 	/// Throws an exception (because this transform cannot be reversed).
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut)
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut)
 	{ throw Ex("This transformation cannot be reversed"); }
 
 	/// Sets a random seed to use with this attribute selector
@@ -537,7 +523,7 @@ public:
 	GNominalToCat(size_t valueCap = 12);
 
 	/// Load from a DOM.
-	GNominalToCat(GDomNode* pNode, GLearnerLoader& ll);
+	GNominalToCat(const GDomNode* pNode);
 
 	virtual ~GNominalToCat();
 
@@ -545,14 +531,14 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 #ifndef MIN_PREDICT
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 #endif // MIN_PREDICT
 
 	/// Makes a mapping from the post-transform attribute indexes to the pre-transform attribute indexes
@@ -580,8 +566,8 @@ class GNormalize : public GIncrementalTransform
 {
 protected:
 	double m_min, m_max;
-	double* m_pMins;
-	double* m_pRanges;
+	GVec m_mins;
+	GVec m_ranges;
 
 public:
 	/// min and max specify the target range. (The input domain is determined
@@ -589,7 +575,7 @@ public:
 	GNormalize(double min = 0.0, double max = 1.0);
 
 	/// Load from a DOM.
-	GNormalize(GDomNode* pNode, GLearnerLoader& ll);
+	GNormalize(const GDomNode* pNode);
 
 	virtual ~GNormalize();
 
@@ -597,16 +583,16 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 
 	/// Specify the input min and range values for each attribute
-	void setMinsAndRanges(const GRelation& pRel, const double* pMins, const double* pRanges);
+	void setMinsAndRanges(const GRelation& pRel, const GVec& mins, const GVec& ranges);
 
 protected:
 	/// See the comment for GIncrementalTransform::train
@@ -626,15 +612,15 @@ class GDiscretize : public GIncrementalTransform
 {
 protected:
 	size_t m_bucketsIn, m_bucketsOut;
-	double* m_pMins;
-	double* m_pRanges;
+	GVec m_mins;
+	GVec m_ranges;
 
 public:
 	/// if buckets is less than 0, then it will use the floor of the square root of the number of rows in the data
 	GDiscretize(size_t buckets = INVALID_INDEX);
 
 	/// Load from a DOM.
-	GDiscretize(GDomNode* pNode, GLearnerLoader& ll);
+	GDiscretize(const GDomNode* pNode);
 
 	virtual ~GDiscretize();
 
@@ -642,13 +628,13 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 
 protected:
 	/// See the comment for GIncrementalTransform::train
@@ -674,7 +660,7 @@ public:
 	GImputeMissingVals();
 
 	/// Deserializing constructor
-	GImputeMissingVals(GDomNode* pNode, GLearnerLoader& ll);
+	GImputeMissingVals(const GDomNode* pNode, GLearnerLoader& ll);
 
 	virtual ~GImputeMissingVals();
 
@@ -682,13 +668,13 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 
 	/// Sets the collaborative filter used to impute missing values. Takes
 	/// ownership of pCF. If no collaborative filter is set, the default is to use
@@ -724,7 +710,7 @@ public:
 	GLogify();
 
 	/// Load from a DOM.
-	GLogify(GDomNode* pNode, GLearnerLoader& ll);
+	GLogify(const GDomNode* pNode);
 
 	virtual ~GLogify();
 
@@ -732,13 +718,13 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GIncrementalTransform::transform
-	virtual void transform(const double* pIn, double* pOut);
+	virtual void transform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransform
-	virtual void untransform(const double* pIn, double* pOut);
+	virtual void untransform(const GVec& in, GVec& out);
 
 	/// See the comment for GIncrementalTransform::untransformToDistribution
-	virtual void untransformToDistribution(const double* pIn, GPrediction* pOut);
+	virtual void untransformToDistribution(const GVec& in, GPrediction* pOut);
 
 protected:
 	/// See the comment for GIncrementalTransform::trainInner

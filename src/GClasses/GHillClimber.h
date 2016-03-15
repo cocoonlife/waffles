@@ -46,6 +46,11 @@ public:
 	GMomentumGreedySearch(GTargetFunction* pCritic);
 	virtual ~GMomentumGreedySearch();
 
+#ifndef MIN_PREDICT
+	/// Performs unit testing. Throws an exception if any test fails.
+	static void test();
+#endif
+
 	/// Returns a pointer to the state vector
 	virtual double* currentVector() { return m_pVector; }
 
@@ -66,7 +71,10 @@ protected:
 };
 
 
-
+/// In each dimension, tries 5 candidate adjustments:
+/// a lot smaller, a little smaller, same spot, a little bigger, and a lot bigger.
+/// If it picks a smaller adjustment, the step size in that dimension is made smaller.
+/// If it picks a bigger adjustment, the step size in that dimension is made bigger.
 class GHillClimber : public GOptimizer
 {
 protected:
@@ -80,6 +88,11 @@ protected:
 public:
 	GHillClimber(GTargetFunction* pCritic);
 	virtual ~GHillClimber();
+
+#ifndef MIN_PREDICT
+	/// Performs unit testing. Throws an exception if any test fails.
+	static void test();
+#endif
 
 	/// Returns a pointer to the current vector
 	virtual double* currentVector() { return m_pVector; }
@@ -108,11 +121,9 @@ protected:
 
 
 
-/// This algorithm tries the current direction and a slightly
-/// perturbed direction at each step. If the perturbed direction
-/// resulted in faster improvement, it becomes the new current
-/// direction. As long as the current direction yields improvement,
-/// it accelerates, otherwise it decelerates.
+/// Perturbs the current vector in a random direction.
+/// If it made the vector worse, restores the previous vector.
+/// Decays the deviation of perturbation over time.
 class GAnnealing : public GOptimizer
 {
 protected:
@@ -127,8 +138,13 @@ protected:
 	GRand* m_pRand;
 
 public:
-	GAnnealing(GTargetFunction* pTargetFunc, double initialDeviation, double decay, GRand* pRand);
+	GAnnealing(GTargetFunction* pTargetFunc, GRand* pRand);
 	virtual ~GAnnealing();
+
+#ifndef MIN_PREDICT
+	/// Performs unit testing. Throws an exception if any test fails.
+	static void test();
+#endif
 
 	/// Performs a little more optimization. (Call this in a loop until
 	/// acceptable results are found.)
@@ -144,6 +160,38 @@ public:
 
 protected:
 	void reset();
+};
+
+
+
+
+/// This algorithm picks a random direction, then uses binary search
+/// to determine how far to step, and repeats
+class GRandomDirectionBinarySearch : public GOptimizer
+{
+protected:
+	GVec m_direction;
+	GVec m_current;
+	size_t m_dims;
+	double m_stepSize;
+	double m_err;
+	GRand* m_pRand;
+
+public:
+	GRandomDirectionBinarySearch(GTargetFunction* pTargetFunc, GRand* pRand);
+	virtual ~GRandomDirectionBinarySearch();
+
+#ifndef MIN_PREDICT
+	/// Performs unit testing. Throws an exception if any test fails.
+	static void test();
+#endif
+
+	/// Performs a little more optimization. (Call this in a loop until
+	/// acceptable results are found.)
+	virtual double iterate();
+
+	/// Returns the best vector yet found.
+	virtual double* currentVector() { return m_current.data(); }
 };
 
 
@@ -182,6 +230,7 @@ public:
 
 	/// Sets the momentum value
 	void setMomentum(double d) { m_dMomentum = d; }
+
 protected:
 	void reset();
 };

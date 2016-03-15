@@ -25,6 +25,7 @@
 #include "GKernelTrick.h"
 #include "GHolders.h"
 #include <cmath>
+#include <memory>
 
 namespace GClasses {
 
@@ -48,19 +49,19 @@ double GRunningCovariance::element(size_t row, size_t col)
 	return n / (n - 1) * (m_sums[row][col] / m_counts[row][col] - (m_sums[m_counts.rows()][row] * m_sums[m_counts.rows()][col]) / (m_counts[row][row] * m_counts[col][col]));
 }
 
-void GRunningCovariance::add(const double* pVec)
+void GRunningCovariance::add(const GVec& vec)
 {
 	for(size_t i = 0; i < m_counts.rows(); i++)
 	{
-		if(pVec[i] != UNKNOWN_REAL_VALUE)
+		if(vec[i] != UNKNOWN_REAL_VALUE)
 		{
-			m_sums[m_counts.rows()][i] += pVec[i];
+			m_sums[m_counts.rows()][i] += vec[i];
 			for(size_t j = i; j < m_counts.rows(); j++)
 			{
-				if(pVec[j] != UNKNOWN_REAL_VALUE)
+				if(vec[j] != UNKNOWN_REAL_VALUE)
 				{
 					m_counts[i][j]++;
-					m_sums[i][j] += pVec[i] * pVec[j];
+					m_sums[i][j] += vec[i] * vec[j];
 				}
 			}
 		}
@@ -80,9 +81,9 @@ void GRunningCovariance::test()
 	GRand rand(0);
 	GMatrix m(13, 7);
 	for(size_t i = 0; i < m.rows(); i++)
-		rand.cubical(m[i], m.cols());
+		m[i].fillUniform(rand);
 	GMatrix* pCov1 = m.covarianceMatrix();
-	Holder<GMatrix> hCov1(pCov1);
+	std::unique_ptr<GMatrix> hCov1(pCov1);
 	m.centerMeanAtOrigin();
 	GRunningCovariance rc(m.cols());
 	for(size_t i = 0; i < m.rows(); i++)
@@ -112,8 +113,8 @@ GGaussianProcess::GGaussianProcess()
 	m_pKernel = new GKernelIdentity();
 }
 
-GGaussianProcess::GGaussianProcess(GDomNode* pNode, GLearnerLoader& ll)
-: GSupervisedLearner(pNode, ll), m_pBuf(NULL)
+GGaussianProcess::GGaussianProcess(const GDomNode* pNode)
+: GSupervisedLearner(pNode), m_pBuf(NULL)
 {
 	m_weightsPriorVar = pNode->field("wv")->asDouble();
 	m_noiseVar = pNode->field("nv")->asDouble();
@@ -141,7 +142,7 @@ void GGaussianProcess::test()
 	GGaussianProcess* pGP = new GGaussianProcess();
 	pGP->setKernel(new GKernelGaussianRBF(0.2));
 	GAutoFilter af2(pGP);
-	af2.basicTest(0.67, 0.93);
+	af2.basicTest(0.67, 0.92);
 }
 #endif
 
@@ -190,13 +191,12 @@ void GGaussianProcess::trainInner(const GMatrix& features, const GMatrix& labels
 	GReleaseDataHolder hL(&l);
 	for(size_t i = 0; i < features.rows(); i++)
 	{
-		f.takeRow((double*)features[i]);
-		l.takeRow((double*)labels[i]);
+		f.takeRow((GVec*)&features[i]);
+		l.takeRow((GVec*)&labels[i]);
 	}
-	GRand rand(0);
 	while(f.rows() > m_maxSamples)
 	{
-		size_t i = (size_t)rand.next(f.rows());
+		size_t i = (size_t)m_rand.next(f.rows());
 		f.releaseRow(i);
 		l.releaseRow(i);
 	}
@@ -206,20 +206,18 @@ void GGaussianProcess::trainInner(const GMatrix& features, const GMatrix& labels
 void GGaussianProcess::trainInnerInner(const GMatrix& features, const GMatrix& labels)
 {
 	clear();
-	size_t dims = features.cols();
 	GMatrix* pL;
 	{
 		// Compute the kernel matrix
 		GMatrix k(features.rows(), features.rows());
 		for(size_t i = 0; i < features.rows(); i++)
 		{
-			double* pRow = k[i];
-			const double* pA = features[i];
+			GVec& row = k[i];
+			const GVec& a = features[i];
 			for(size_t j = 0; j < features.rows(); j++)
 			{
-				const double* pB = features[j];
-				*pRow = m_weightsPriorVar * m_pKernel->apply(pA, pB, dims);
-				pRow++;
+				const GVec& b = features[j];
+				row[j] = m_weightsPriorVar * m_pKernel->apply(a, b);
 			}
 		}
 
@@ -230,16 +228,16 @@ void GGaussianProcess::trainInnerInner(const GMatrix& features, const GMatrix& l
 		// Compute L
 		pL = k.cholesky(true);
 	}
-	Holder<GMatrix> hL(pL);
+	std::unique_ptr<GMatrix> hL(pL);
 
 	// Compute the model
 	m_pLInv = pL->pseudoInverse();
 	GMatrix* pTmp = GMatrix::multiply(*m_pLInv, labels, false, false);
-	Holder<GMatrix> hTmp(pTmp);
+	std::unique_ptr<GMatrix> hTmp(pTmp);
 	GMatrix* pLTrans = pL->transpose();
-	Holder<GMatrix> hLTrans(pLTrans);
+	std::unique_ptr<GMatrix> hLTrans(pLTrans);
 	GMatrix* pLTransInv = pLTrans->pseudoInverse();
-	Holder<GMatrix> hLTransInv(pLTransInv);
+	std::unique_ptr<GMatrix> hLTransInv(pLTransInv);
 	m_pAlpha = GMatrix::multiply(*pLTransInv, *pTmp, false, false);
 	GAssert(m_pAlpha->rows() == features.rows());
 	GAssert(m_pAlpha->cols() == labels.cols());
@@ -248,23 +246,22 @@ void GGaussianProcess::trainInnerInner(const GMatrix& features, const GMatrix& l
 }
 
 // virtual
-void GGaussianProcess::predict(const double* pIn, double* pOut)
+void GGaussianProcess::predict(const GVec& in, GVec& out)
 {
 	if(!m_pBuf)
 		m_pBuf = new GMatrix(1, m_pStoredFeatures->rows());
 
 	// Compute k*
-	double* pK = m_pBuf->row(0);
-	size_t dims = m_pStoredFeatures->cols();
+	GVec& k = m_pBuf->row(0);
 	for(size_t i = 0; i < m_pStoredFeatures->rows(); i++)
-		*(pK++) = m_weightsPriorVar * m_pKernel->apply(m_pStoredFeatures->row(i), pIn, dims);
+		k[i] = m_weightsPriorVar * m_pKernel->apply(m_pStoredFeatures->row(i), in);
 
 	// Compute the prediction
-	m_pAlpha->multiply(m_pBuf->row(0), pOut, true);
+	m_pAlpha->multiply(m_pBuf->row(0), out, true);
 }
 
 // virtual
-void GGaussianProcess::predictDistribution(const double* pIn, GPrediction* pOut)
+void GGaussianProcess::predictDistribution(const GVec& in, GPrediction* out)
 {
 	if(!m_pBuf)
 		m_pBuf = new GMatrix(2, m_pStoredFeatures->rows());
@@ -272,26 +269,24 @@ void GGaussianProcess::predictDistribution(const double* pIn, GPrediction* pOut)
 		m_pBuf->newRow();
 
 	// Compute k*
-	double* pK = m_pBuf->row(0);
-	size_t dims = m_pStoredFeatures->cols();
+	GVec& k = m_pBuf->row(0);
 	for(size_t i = 0; i < m_pStoredFeatures->rows(); i++)
-		*(pK++) = m_weightsPriorVar * m_pKernel->apply(m_pStoredFeatures->row(i), pIn, dims);
+		k[i] = m_weightsPriorVar * m_pKernel->apply(m_pStoredFeatures->row(i), in);
 
 	// Compute the prediction
-	GTEMPBUF(double, pred, m_pAlpha->cols());
+	GVec pred;
 	m_pAlpha->multiply(m_pBuf->row(0), pred, true);
 
 	// Compute the variance
-	double* pV = m_pBuf->row(1);
-	m_pLInv->multiply(pK, pV);
-	double variance = m_pKernel->apply(pK, pK, m_pStoredFeatures->rows()) - GVec::squaredMagnitude(pV, m_pLInv->rows());
+	GVec& v = m_pBuf->row(1);
+	m_pLInv->multiply(k, v);
+	double variance = m_pKernel->apply(k, k) - v.squaredMagnitude();
 
 	// Store the results
 	for(size_t i = 0; i < m_pAlpha->cols(); i++)
 	{
-		GNormalDistribution* pNorm = pOut->makeNormal();
-		pNorm->setMeanAndVariance(*pred, variance);
-		pred++;
+		GNormalDistribution* pNorm = out->makeNormal();
+		pNorm->setMeanAndVariance(pred[i], variance);
 	}
 }
 

@@ -32,6 +32,7 @@
 #include <vector>
 #include <deque>
 #include <cmath>
+#include <memory>
 
 using namespace GClasses;
 using std::vector;
@@ -557,11 +558,11 @@ GMatrix* GFloydWarshall::releaseCostMatrix()
 	return m_pCosts;
 }
 
-void GFloydWarshall::addDirectedEdge(size_t from, size_t to, double cost)
+void GFloydWarshall::addDirectedEdge(size_t from, size_t to, double edgecost)
 {
-	if(cost < m_pCosts->row(from)[to])
+	if(edgecost < m_pCosts->row(from)[to])
 	{
-		m_pCosts->row(from)[to] = cost;
+		m_pCosts->row(from)[to] = edgecost;
 		m_pPaths[from * m_nodes + to] = to;
 	}
 }
@@ -591,12 +592,11 @@ bool GFloydWarshall::isConnected()
 {
 	for(size_t i = 0; i < m_nodes; i++)
 	{
-		double* pRow = m_pCosts->row(i);
+		GVec& pRow = m_pCosts->row(i);
 		for(size_t j = 0; j < m_nodes; j++)
 		{
-			if(*pRow == 1e300)
+			if(pRow[j] == 1e300)
 				return false;
-			pRow++;
 		}
 	}
 	return true;
@@ -671,10 +671,10 @@ GDijkstra::~GDijkstra()
 	delete[] m_pPrevious;
 }
 
-void GDijkstra::addDirectedEdge(size_t from, size_t to, double cost)
+void GDijkstra::addDirectedEdge(size_t from, size_t to, double edgecost)
 {
 	m_pNeighbors[from].push_back(to);
-	m_pEdgeCosts[from].push_back(cost);
+	m_pEdgeCosts[from].push_back(edgecost);
 }
 
 void GDijkstra::compute(size_t origin)
@@ -685,7 +685,7 @@ void GDijkstra::compute(size_t origin)
 		m_pCosts[i] = 1e300;
 	}
 	size_t* q = new size_t[2 * m_nodes];
-	ArrayHolder<size_t> hQ(q);
+	std::unique_ptr<size_t[]> hQ(q);
 	size_t* map = q + m_nodes;
 	for(size_t i = 0; i < m_nodes; i++)
 	{
@@ -865,9 +865,9 @@ void GBrandesBetweennessCentrality::compute()
 	for(size_t s = 0; s < m_nodeCount; s++)
 	{
 		vector<size_t>* lists = new vector<size_t>[m_nodeCount];
-		ArrayHolder< vector<size_t> > hLists(lists);
+		std::unique_ptr< vector<size_t>[] > hLists(lists);
 		double* sigma = new double[2 * m_nodeCount];
-		ArrayHolder<double> hSigma(sigma);
+		std::unique_ptr<double[]> hSigma(sigma);
 		double* d = sigma + m_nodeCount;
 		GVec::setAll(sigma, 0.0, m_nodeCount);
 		sigma[s] = 1.0;
@@ -886,7 +886,7 @@ void GBrandesBetweennessCentrality::compute()
 			size_t v = q.front();
 			q.pop_front();
 			stack.push_back(v);
-			size_t neighborIndex = 0;
+			size_t neighIndex = 0;
 			for(vector<size_t>::iterator it = m_pNeighbors[v].begin(); it != m_pNeighbors[v].end(); it++)
 			{
 				size_t w = *it;
@@ -899,9 +899,9 @@ void GBrandesBetweennessCentrality::compute()
 				{
 					sigma[w] += sigma[v];
 					lists[w].push_back(v);
-					lists[w].push_back(neighborIndex);
+					lists[w].push_back(neighIndex);
 				}
-				neighborIndex++;
+				neighIndex++;
 			}
 		}
 
@@ -914,10 +914,10 @@ void GBrandesBetweennessCentrality::compute()
 			for(size_t i = 0; i < lists[w].size(); i += 2)
 			{
 				size_t v = lists[w][i];
-				size_t neighborIndex = lists[w][i + 1];
+				size_t neighIndex = lists[w][i + 1];
 				double f = (sigma[v] / sigma[w]) * (1.0 + d[w]);
 				d[v] += f;
-				m_pEdgeBetweenness[v][neighborIndex] += f;
+				m_pEdgeBetweenness[v][neighIndex] += f;
 			}
 			if(w != s)
 				m_pVertexBetweenness[w] += d[w];
@@ -942,9 +942,9 @@ size_t GBrandesBetweennessCentrality::neighborIndex(size_t from, size_t to)
 	return INVALID_INDEX;
 }
 
-double GBrandesBetweennessCentrality::edgeBetweennessByNeighbor(size_t vertex, size_t neighborIndex)
+double GBrandesBetweennessCentrality::edgeBetweennessByNeighbor(size_t vertex, size_t neighIndex)
 {
-	return m_pEdgeBetweenness[vertex][neighborIndex];
+	return m_pEdgeBetweenness[vertex][neighIndex];
 }
 
 double GBrandesBetweennessCentrality::edgeBetweennessByVertex(size_t vertex1, size_t vertex2)
@@ -1050,7 +1050,7 @@ void GAtomicCycleFinder::addEdgeIfNotDupe(size_t a, size_t b)
 void GAtomicCycleFinder::compute()
 {
 	size_t* pEdgeStarts = new size_t[m_nodeCount];
-	ArrayHolder<size_t> hEdgeStarts(pEdgeStarts);
+	std::unique_ptr<size_t[]> hEdgeStarts(pEdgeStarts);
 	size_t edgeCount = 0;
 	for(size_t i = 0; i < m_nodeCount; i++)
 	{
@@ -1083,7 +1083,7 @@ void GAtomicCycleFinder::compute()
 					// to the other, while only crossing edges that the outer breadth-first-search
 					// has crossed, not including the edge of this cycle that was just detected.)
 					size_t* pPrevs = new size_t[m_nodeCount];
-					ArrayHolder<size_t> hPrevs(pPrevs);
+					std::unique_ptr<size_t[]> hPrevs(pPrevs);
 					pPrevs[b] = INVALID_INDEX;
 					GBitTable visited2(m_nodeCount);
 					deque<size_t> q2;

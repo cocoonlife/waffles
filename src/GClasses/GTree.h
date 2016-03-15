@@ -20,6 +20,7 @@
 #define GTREE_H
 
 #include "GError.h"
+#include <iostream>
 
 namespace GClasses
 {
@@ -459,36 +460,41 @@ public:
 			return this;
 	}
 
+	/// This should typically only be called through one of the methods in GRelationalTable.
+	/// Returns a row that matches in the specified column, or NULL if there is no match.
 	template<typename Comp>
 	GRelationalRow<T>* find(T r, size_t start, size_t* outIndex, size_t c, Comp& comp)
 	{
 		if(comp(r, row, c))
 			return el[c].left ? el[c].left->find(r, start, outIndex, c, comp) : NULL;
-		else if(r > row)
-			return el[c].right ? el[c].right->find(r, el[c].left ? start + el[c].left->size + 1 : start + 1, outIndex, c, comp) : NULL;
+		else if(comp(row, r, c))
+			return el[c].right ? el[c].right->find(r, el[c].left ? start + el[c].left->el[c].size + 1 : start + 1, outIndex, c, comp) : NULL;
 		else
 		{
 			if(outIndex)
-				*outIndex = start + (el[c].left ? el[c].left->size : 0);
+				*outIndex = start + (el[c].left ? el[c].left->el[c].size : 0);
 			return this;
 		}
 	}
 
+	/// This should typically only be called through one of the methods in GRelationalTable.
+	/// Returns a row that matches in the specified column, or an adjacent row if there is no exact match.
 	template<typename Comp>
 	GRelationalRow<T>* approximate(T r, size_t start, size_t* outIndex, size_t c, Comp& comp)
 	{
 		if(comp(r, row, c))
-			return el[c].left ? el[c].left->find(r, start, outIndex, c, comp) : this;
-		else if(r > row)
-			return el[c].right ? el[c].right->find(r, el[c].left ? start + el[c].left->size + 1 : start + 1, outIndex, c, comp) : this;
+			return el[c].left ? el[c].left->approximate(r, start, outIndex, c, comp) : this;
+		else if(comp(row, r, c))
+			return el[c].right ? el[c].right->approximate(r, el[c].left ? start + el[c].left->el[c].size + 1 : start + 1, outIndex, c, comp) : this;
 		else
 		{
 			if(outIndex)
-				*outIndex = start + (el[c].left ? el[c].left->size : 0);
+				*outIndex = start + (el[c].left ? el[c].left->el[c].size : 0);
 			return this;
 		}
 	}
 
+	/// This should typically only be called through GRelationalTable::remove.
 	template<typename Comp>
 	GRelationalRow<T>* remove(size_t c, Comp& comp)
 	{
@@ -579,9 +585,23 @@ public:
 			return NULL;
 		}
 	}
+
+	template <typename Comp>
+	void print(const Comp& comp, std::ostream& stream, size_t col, size_t columnCount, size_t depth)
+	{
+		if(el[col].left)
+			el[col].left->print(comp, stream, col, columnCount, depth + 1);
+		for(size_t i = 0; i < depth; i++)
+			stream << "  ";
+		comp.print(stream, row);
+		stream << "\n";
+		if(el[col].right)
+			el[col].right->print(comp, stream, col, columnCount, depth + 1);
+	}
 };
 
 
+/// See GTree.cpp for an example of how to use this class.
 template <typename T, typename Comp>
 class GRelationalTable
 {
@@ -603,6 +623,14 @@ public:
 		delete(spare);
 		delete(roots[0]);
 		delete[] roots;
+	}
+
+	/// Drops all content from this table
+	void clear()
+	{
+		delete(roots[0]);
+		for(size_t i = 0; i < comp.cols(); i++)
+			roots[i] = NULL;
 	}
 
 	/// Inserts a row into this relational table.
@@ -659,7 +687,7 @@ public:
 	{
 		if(!roots[col])
 			return NULL;
-		GRelationalRow<T>* node = roots[col].approximate(row, 0, outIndex, col, comp);
+		GRelationalRow<T>* node = roots[col]->approximate(row, 0, outIndex, col, comp);
 		while(true)
 		{
 			GRelationalRow<T>* prev = node->prev(col);
@@ -693,6 +721,16 @@ public:
 		delete(spare);
 		spare = row;
 		spare->isolate(comp.cols());
+	}
+
+	/// Prints a simple representation of the tree in the specified column.
+	/// This method assumes that the Comp object has a method with the signature "void print(std::ostream& stream, T) const".
+	void print(std::ostream& stream, size_t col)
+	{
+		if(roots[col])
+			roots[col]->print(comp, stream, col, comp.cols(), 0);
+		else
+			stream << "[empty]\n";
 	}
 };
 

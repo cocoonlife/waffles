@@ -2,7 +2,8 @@
   The contents of this file are dedicated by all of its authors, including
 
     Michael S. Gashler,
-    Eric Moyer
+    Luke B. Godfrey,
+    Eric Moyer,
     anonymous contributors,
 
   to the public domain (http://creativecommons.org/publicdomain/zero/1.0/).
@@ -29,8 +30,10 @@
 #ifdef WINDOWS
 #	include <direct.h>
 #endif
+#include "../GClasses/GActivation.h"
 #include "../GClasses/GApp.h"
 #include "../GClasses/GAssignment.h"
+#include "../GClasses/GAssociative.h"
 #include "../GClasses/GBayesianNetwork.h"
 #include "../GClasses/GBezier.h"
 #include "../GClasses/GBits.h"
@@ -39,6 +42,7 @@
 #include "../GClasses/GCrypto.h"
 #include "../GClasses/GDecisionTree.h"
 #include "../GClasses/GDiff.h"
+#include "../GClasses/GDistance.h"
 #include "../GClasses/GDistribution.h"
 #include "../GClasses/GDom.h"
 #include "../GClasses/GEnsemble.h"
@@ -60,6 +64,7 @@
 #include "../GClasses/GNaiveBayes.h"
 #include "../GClasses/GNaiveInstance.h"
 #include "../GClasses/GNeighborFinder.h"
+#include "../GClasses/GNeuralDecomposition.h"
 #include "../GClasses/GNeuralNet.h"
 #include "../GClasses/GPolynomial.h"
 #include "../GClasses/GPriorityQueue.h"
@@ -155,7 +160,7 @@ namespace{
   };
 
 
-};
+}
 
 
 ///Return the golf dataset used in Mark Hall's dissertation
@@ -166,11 +171,11 @@ std::string golf_arff_dataset(){
 return
   "@RELATION Golf\n"
   "\n"
-  "@ATTRIBUTE Play\treal\n"
-  "@ATTRIBUTE Outlook\treal\n"
-  "@ATTRIBUTE Temperature\treal\n"
-  "@ATTRIBUTE Humidity\treal\n"
-  "@ATTRIBUTE Wind\treal\n"
+  "@ATTRIBUTE Play real\n"
+  "@ATTRIBUTE Outlook real\n"
+  "@ATTRIBUTE Temperature real\n"
+  "@ATTRIBUTE Humidity real\n"
+  "@ATTRIBUTE Wind real\n"
   "\n"
   "@DATA\n"
   "-1,1,1,1,-1\n"
@@ -326,7 +331,7 @@ void test_transform_keeponly()
     (
      "@RELATION Golf\n"
      "\n"
-     "@ATTRIBUTE Outlook\treal\n"
+     "@ATTRIBUTE Outlook real\n"
      "\n"
      "@DATA\n"
      "1\n"
@@ -354,7 +359,7 @@ void test_transform_keeponly()
     (
      "@RELATION Golf\n"
      "\n"
-     "@ATTRIBUTE Wind\treal\n"
+     "@ATTRIBUTE Wind real\n"
      "\n"
      "@DATA\n"
      "-1\n"
@@ -382,8 +387,8 @@ void test_transform_keeponly()
     (
      "@RELATION Golf\n"
      "\n"
-     "@ATTRIBUTE Play\treal\n"
-     "@ATTRIBUTE Wind\treal\n"
+     "@ATTRIBUTE Play real\n"
+     "@ATTRIBUTE Wind real\n"
      "\n"
      "@DATA\n"
      "-1,-1\n"
@@ -411,11 +416,11 @@ void test_transform_keeponly()
     (
      "@RELATION Golf\n"
      "\n"
-     "@ATTRIBUTE Play\treal\n"
-     "@ATTRIBUTE Outlook\treal\n"
-     "@ATTRIBUTE Temperature\treal\n"
-     "@ATTRIBUTE Humidity\treal\n"
-     "@ATTRIBUTE Wind\treal\n"
+     "@ATTRIBUTE Play real\n"
+     "@ATTRIBUTE Outlook real\n"
+     "@ATTRIBUTE Temperature real\n"
+     "@ATTRIBUTE Humidity real\n"
+     "@ATTRIBUTE Wind real\n"
      "\n"
      "@DATA\n"
      "-1,1,1,1,-1\n"
@@ -700,7 +705,10 @@ void test_document_classification()
 				if(len >= 256)
 					throw Ex("Need a bigger buffer");
 				buf[len] = '\0';
-				double accuracy = atof(buf);
+				char* pB = buf;
+				if(*pB == '[')
+					pB++;
+				double accuracy = atof(pB);
 				results[i][j] = accuracy;
 			}
 		}
@@ -877,9 +885,13 @@ public:
 	void runAllTests()
 	{
 		// Class tests
+		runTest("GActivationHinge", GActivationHinge::test);
+		runTest("GActivationLogExp", GActivationLogExp::test);
 		runTest("GAgglomerativeClusterer", GAgglomerativeClusterer::test);
+		runTest("GAnnealing", GAnnealing::test);
 		runTest("GAssignment - linearAssignment", testLinearAssignment);
 		runTest("GAssignment - GSimpleAssignment", GSimpleAssignment::test);
+		runTest("GAssociative", GAssociative::test);
 		runTest("GAtomicCycleFinder", GAtomicCycleFinder::test);
 		runTest("GAttributeSelector", GAttributeSelector::test);
 		runTest("GAutoFilter", GAutoFilter::test);
@@ -905,8 +917,8 @@ public:
 		runTest("GDecisionTree", GDecisionTree::test);
 		runTest("GDiff", GDiff::test);
 		runTest("GDijkstra", GDijkstra::test);
+		runTest("GDistanceMetric", GDistanceMetric::test);
 		runTest("GDom", GDom::test);
-		runTest("GDynamicSystemStateAligner", GDynamicSystemStateAligner::test);
 		runTest("GError.h - to_str", test_to_str);
 		runTest("GFloydWarshall", GFloydWarshall::test);
 		runTest("GFourier", GFourier::test);
@@ -914,6 +926,7 @@ public:
 		runTest("GGraphCut", GGraphCut::test);
 		runTest("GHashTable", GHashTable::test);
 		runTest("GHiddenMarkovModel", GHiddenMarkovModel::test);
+		runTest("GHillClimber", GHillClimber::test);
 		runTest("GIncrementalTransform", GIncrementalTransform::test);
 		runTest("GInstanceRecommender", GInstanceRecommender::test);
 		runTest("GKdTree", GKdTree::test);
@@ -929,17 +942,18 @@ public:
 		runTest("GMatrixFactorization", GMatrixFactorization::test);
 		runTest("GMeanMarginsTree", GMeanMarginsTree::test);
 		runTest("GMixtureOfGaussians", GMixtureOfGaussians::test);
+		runTest("GMomentumGreedySearch", GMomentumGreedySearch::test);
 		runTest("GNaiveBayes", GNaiveBayes::test);
 		runTest("GNaiveInstance", GNaiveInstance::test);
+		runTest("GNeuralDecomposition", GNeuralDecomposition::test);
 		runTest("GNeuralNet", GNeuralNet::test);
-		runTest("GNeuralNetPseudoInverse", GNeuralNetPseudoInverse::test);
-		runTest("GNonlinearPCA", GNonlinearPCA::test);
+//		runTest("GNonlinearPCA", GNonlinearPCA::test);
 		runTest("GPackageServer", GPackageServer::test);
-		runTest("GPCARotateOnly", GPCARotateOnly::test);
 		runTest("GPolynomial", GPolynomial::test);
 		runTest("GPriorityQueue", GPriorityQueue::test);
 		runTest("GProbeSearch", GProbeSearch::test);
 		runTest("GRand", GRand::test);
+		runTest("GRandomDirectionBinarySearch", GRandomDirectionBinarySearch::test);
 		runTest("GRandMersenneTwister", GRandMersenneTwister::test);
 		runTest("GRandomForest", GRandomForest::test);
 		runTest("GRelation", GRelation::test);

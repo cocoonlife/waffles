@@ -55,15 +55,15 @@ class GLayerClassicCuda : public GCudaLayer
 {
 protected:
 	GCudaMatrix m_weights; // Each row is an upstream neuron. Each column is a downstream neuron.
+	GCudaMatrix m_delta;
 	GCudaVector m_bias;
+	GCudaVector m_biasDelta;
 	GCudaVector m_activation;
 	GCudaVector m_incoming;
 	GCudaVector m_error;
 	double* m_pOutgoing;
 
 public:
-using GNeuralNetLayer::updateWeightsClipped;
-
 	/// General-purpose constructor. Takes ownership of pActivationFunction.
 	GLayerClassicCuda(GCudaEngine& engine, size_t inputs, size_t outputs);
 	virtual ~GLayerClassicCuda();
@@ -92,17 +92,16 @@ using GNeuralNetLayer::updateWeightsClipped;
 	/// Returns a buffer used to store error terms for each unit in this layer.
 	virtual double* error();
 
-	virtual void copyBiasToNet();
+	/// Uploads pIn to the GPU, then feeds it through this layer
+	virtual void feedForward(const double* pIn);
 
-	virtual void feedIn(const double* pIn, size_t inputStart, size_t inputCount);
+	/// Feeds the activation from the upstream layer through this layer.
+	/// (If the upstream layer is a GPU-optimized layer, then it will be faster because
+	/// the data can stay on the GPU.)
+	virtual void feedForward(GNeuralNetLayer* pUpStreamLayer);
 
-	virtual void feedIn(GNeuralNetLayer* pUpStreamLayer, size_t inputStart);
-
-	virtual void activate();
-
+	/// Throws an exception because it is not implemented for this layer type yet.
 	virtual void dropOut(GRand& rand, double probOfDrop);
-
-	virtual void dropConnect(GRand& rand, double probOfDrop);
 
 	/// Computes the error terms associated with the output of this layer, given a target vector.
 	/// (Note that this is the error of the output, not the error of the weights. To obtain the
@@ -116,21 +115,19 @@ using GNeuralNetLayer::updateWeightsClipped;
 	/// Backpropagates the error from this layer into the upstream error vector.
 	/// (Assumes that the error in this layer has already been deactivated.
 	/// The error this computes is with respect to the output of the upstream layer.)
-	virtual void backPropError(GNeuralNetLayer* pUpStreamLayer, size_t inputStart = 0);
+	virtual void backPropError(GNeuralNetLayer* pUpStreamLayer);
 
 	/// Updates the weights that feed into this layer (not including the bias) by gradient descent.
 	/// (Assumes the error has already been computed and deactivated.)
 	/// Note that this method does not sync with the GPU. It assumes that you will yet call
 	/// updateBias, which does sync with the GPU.
-	virtual void updateWeights(const double* pUpStreamActivation, size_t inputStart, size_t inputCount, double learningRate, double momentum);
+	virtual void updateDeltas(const double* pUpStreamActivation, double momentum);
 
 	/// Refines the weights by gradient descent.
-	/// Note that this method does not sync with the GPU. It assumes that you will yet call
-	/// updateBias, which does sync with the GPU.
-	virtual void updateWeights(GNeuralNetLayer* pUpStreamLayer, size_t inputStart, double learningRate, double momentum);
+	virtual void updateDeltas(GNeuralNetLayer* pUpStreamLayer, double momentum);
 
-	/// Throws an exception
-	virtual void updateWeightsClipped(const double* pUpStreamActivation, size_t inputStart, size_t inputCount, double learningRate, double max);
+	/// Adds the deltas to the weights.
+	virtual void applyDeltas(double learningRate);
 
 	/// This is a special weight update method for use with drop-connect. It updates the weights, and restores
 	/// the weights that were previously dropped by a call to dropConnect.
@@ -161,7 +158,7 @@ using GNeuralNetLayer::updateWeightsClipped;
 	virtual size_t vectorToWeights(const double* pVector);
 
 	/// Copy the weights from pSource to this layer. (Assumes pSource is the same type of layer.)
-	virtual void copyWeights(GNeuralNetLayer* pSource);
+	virtual void copyWeights(const GNeuralNetLayer* pSource);
 
 	/// Initialize the weights with small random values.
 	virtual void resetWeights(GRand& rand);
@@ -173,32 +170,11 @@ using GNeuralNetLayer::updateWeightsClipped;
 	virtual void perturbWeights(GRand& rand, double deviation, size_t start = 0, size_t count = INVALID_INDEX);
 
 	/// Scales weights if necessary such that the manitude of the weights (not including the bias) feeding into each unit are <= max.
-	virtual void maxNorm(double max);
-
-        /// Compute the L1 norm (sum of absolute values) of weights feeding into the specified unit
-        virtual double unitIncomingWeightsL1Norm(size_t unit);
-
-        /// Compute the L2 norm (sum of squares) of weights feeding into the specified unit
-        virtual double unitIncomingWeightsL2Norm(size_t unit);
-
-        /// Compute the L1 norm (sum of absolute values) of weights feeding into this layer from the specified input
-        virtual double unitOutgoingWeightsL1Norm(size_t input);
-
-        /// Compute the L2 norm (sum of squares) of weights feeding into this layer from the specified input
-        virtual double unitOutgoingWeightsL2Norm(size_t input);
-
-        /// Scale weights that feed into the specified unit
-        virtual void scaleUnitIncomingWeights(size_t unit, double scalar);
-
-        /// Scale weights that feed into this layer from the specified input
-        virtual void scaleUnitOutgoingWeights(size_t input, double scalar);
+	virtual void maxNorm(double min, double max);
 
 	/// Adjusts weights such that values in the new range will result in the
 	/// same behavior that previously resulted from values in the old range.
 	virtual void renormalizeInput(size_t input, double oldMin, double oldMax, double newMin = 0.0, double newMax = 1.0);
-
-	/// Throws an exception
-	virtual void updateBiasClipped(double learningRate, double max);
 
 	/// Throws an exception
 	virtual void refineActivationFunction(double learningRate);
@@ -211,6 +187,16 @@ using GNeuralNetLayer::updateWeightsClipped;
 
 	/// Copies the weights and bias vector from GLayerClassic layer into this layer.
 	void download(GLayerClassic& dest);
+
+protected:
+	void copyBiasToNet();
+
+	void feedIn(const double* pIn);
+
+	void feedIn(GNeuralNetLayer* pUpStreamLayer);
+
+	void activate();
+
 };
 
 } // namespace GClasses

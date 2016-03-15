@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <cmath>
 #include <string>
+#include <memory>
 
 using namespace GClasses;
 using std::vector;
@@ -543,11 +544,11 @@ GFunctionNode* GFunctionParser::parseMathOperator(std::vector<std::string>& vari
 	GFunctionNode* pLeft = NULL;
 	if(index > start)
 		pLeft = parseFunctionBody(variables, tokens, start, index - start, depth);
-	Holder<GFunctionNode> hLeft(pLeft);
+	std::unique_ptr<GFunctionNode> hLeft(pLeft);
 	GFunctionNode* pRight = NULL;
 	if(index < start + count - 1)
 		pRight = parseFunctionBody(variables, tokens, index + 1, start + count - index - 1, depth);
-	Holder<GFunctionNode> hRight(pRight);
+	std::unique_ptr<GFunctionNode> hRight(pRight);
 	if(!pLeft)
 	{
 		if(pRight && tokens[index].compare("-") == 0)
@@ -610,27 +611,35 @@ void GFunctionParser::parseCommaSeparatedChildren(std::vector<std::string>& vari
 	pFunc->AddChild(parseFunctionBody(variables, tokens, childBegin, start + count - childBegin, depth));
 }
 
+std::string GFunctionParser_joinTokens(std::vector<std::string>& tokens, int start)
+{
+	string s;
+	for(int i = 0; i < start; i++)
+		s += tokens[i];
+	return s;
+}
+
 GFunctionNode* GFunctionParser::parseFunctionBody(std::vector<std::string>& variables, vector<string>& tokens, int start, int count, int depth)
 {
 	// Protect against maliciously designed formulas
 	if(depth > 10000)
 		throw Ex("Pathologically deep nesting");
 	if(count <= 0)
-		throw Ex("Empty expression");
+		throw Ex("Empty expression following ", GFunctionParser_joinTokens(tokens, start));
 
 	// Handle enclosing parens
 	if(tokens[start].compare("(") == 0 && tokens[start + count - 1].compare(")") == 0)
 	{
-		int depth = 1;
+		int dep = 1;
 		int i;
 		for(i = 1; i < count - 1; i++)
 		{
 			if(tokens[start + i].compare("(") == 0)
-				depth++;
+				dep++;
 			else if(tokens[start + i].compare(")") == 0)
 			{
-				depth--;
-				if(depth == 0)
+				dep--;
+				if(dep == 0)
 					break;
 			}
 		}
@@ -681,7 +690,7 @@ GFunctionNode* GFunctionParser::parseFunctionBody(std::vector<std::string>& vari
 				throw Ex("Cannot parse this portion of the expression: ", s.c_str());
 			}
 			GFunctionCall* pFunc = new GFunctionCall(tokens[start].c_str());
-			Holder<GFunctionCall> hFunc(pFunc);
+			std::unique_ptr<GFunctionCall> hFunc(pFunc);
 			parseCommaSeparatedChildren(variables, pFunc, tokens, start + 2, count - 3, depth + 1);
 			return hFunc.release();
 		}
@@ -690,15 +699,14 @@ GFunctionNode* GFunctionParser::parseFunctionBody(std::vector<std::string>& vari
 
 void GFunctionParser::parseVariableNames(vector<string>& variables, vector<string>& tokens, int start, int count)
 {
-	for(int i = 0; i < count; i++)
+	for(int i = 0; i < count - 1; i += 2)
 	{
 		char c = tokens[start + i][0];
 		if(!GFunctionTokenizer::IsNameChar(c))
 			throw Ex("Expected a variable name to start with a letter or '_'");
 		variables.push_back(tokens[start + i]);
-		if(i + 1 < count && tokens[start + i + 1].compare(",") != 0)
+		if(tokens[start + i + 1].compare(",") != 0)
 			throw Ex("Expected a comma between variable declarations");
-		i++;
 	}
 }
 

@@ -46,7 +46,7 @@ public:
 	virtual const char* name() const = 0;
 
 	/// The activation function
-	virtual double squash(double x, size_t index) = 0;
+	virtual double squash(double x, size_t index = 0) = 0;
 
 	/// The derivative of the activation function
 	virtual double derivative(double x, size_t index) = 0;
@@ -61,7 +61,7 @@ public:
 	/// This computes the derivative of the net value. (Sometimes, such as with
 	/// GActivationLogistic, it is more efficient to compute this from the activation
 	/// value, so both are provided.)
-	virtual double derivativeOfNet(double net, double activation, size_t index) { return derivative(net, index); }
+	virtual double derivativeOfNet(double net, double activation, size_t index = 0) { return derivative(net, index); }
 
 	/// Serialize this object
 	virtual GDomNode* serialize(GDom* pDoc) const;
@@ -69,14 +69,32 @@ public:
 	/// Resizes the layer
 	virtual void resize(size_t units) {}
 
-	/// Refines the parameters of this activation function by stochastic gradient descent
-	virtual void refine(const double* pNet, const double* pActivation, const double* pError, double learningRate) {}
+	/// Sets the error term for this activation function. Used in stochastic gradient descent. (The default behavior is nothing because most activation functions have no parameters to refine.)
+	virtual void setError(const GVec& error) {}
+
+	/// Computes the deltas necessary to refine the parameters of this activation function by gradient descent
+	virtual void updateDeltas(const GVec& net, const GVec& activation, double momentum) {}
+
+	/// Applies the deltas to refine the parameters of this activation function by gradient descent
+	virtual void applyDeltas(double learningRate) {}
 
 	/// Regularizes the parameters of this activation function
 	virtual void regularize(double lambda) {}
 
 	/// Deserialize this object
 	static GActivationFunction* deserialize(GDomNode* pNode);
+
+	/// Returns the number of weights in this activation function. (Most activation functions have none, so the default implementation returns 0.)
+	virtual size_t countWeights() { return 0; }
+
+	/// Serialize the weights in this activation function. (Most activation functions have none, so the default implementation is a noop.)
+	virtual size_t weightsToVector(double* pOutVector) { return 0; }
+
+	/// Serialize the weights in this activation function. (Most activation functions have none, so the default implementation is a noop.)
+	virtual size_t vectorToWeights(const double* pVector) { return 0; }
+
+	/// Copies the weights from another instance. (Most activation functions have no weights, so the default implementation is a noop.)
+	virtual void copyWeights(const GActivationFunction* pOther) {}
 
 //	/// Calculate the scaling factor for this activation function that minimizes the vanishing gradient
 //	double measureWeightScale(size_t width, size_t depth, size_t seed);
@@ -90,7 +108,7 @@ public:
 	virtual const char* name() const { return "logistic"; }
 
 	/// The logistic function. Returns 1.0/(e^(-x)+1.0)
-	virtual double squash(double x, size_t index)
+	virtual double squash(double x, size_t index = 0)
 	{
 		if(x >= 700.0) // Don't trigger a floating point exception
 			return 1.0;
@@ -113,7 +131,7 @@ public:
 	}
 
 	/// Returns y*(1.0-y)
-	virtual double derivativeOfNet(double net, double activation, size_t index) { return activation * (1.0 - activation); }
+	virtual double derivativeOfNet(double net, double activation, size_t index = 0) { return activation * (1.0 - activation); }
 
 	/// See the comment for GActivationFunction::clone
 	virtual GActivationFunction* clone() { return new GActivationLogistic(); }
@@ -127,7 +145,7 @@ public:
 	virtual const char* name() const { return "arctan"; }
 
 	/// Returns atan(x). The result will be in the range -PI/2 <= y <= PI/2
-	virtual double squash(double x, size_t index) { return atan(x); }
+	virtual double squash(double x, size_t index = 0) { return atan(x); }
 
 	/// Returns 1/(x*x+1.0)
 	virtual double derivative(double x, size_t index) { return 1.0 / (x * x + 1.0); }
@@ -147,7 +165,7 @@ public:
 	virtual const char* name() const { return "tanh"; }
 
 	/// Returns tanh(x). The result is in the range -1 <= y <= 1
-	virtual double squash(double x, size_t index)
+	virtual double squash(double x, size_t index = 0)
 	{
 		//return tanh(x);
 		if(x >= 700.0)
@@ -183,7 +201,7 @@ public:
 	}
 
 	/// Returns 1-(y*y)
-	virtual double derivativeOfNet(double net, double activation) { return 1.0 - (activation * activation); }
+	virtual double derivativeOfNet(double net, double activation, size_t index = 0) { return 1.0 - (activation * activation); }
 
 	/// See the comment for GActivationFunction::clone
 	virtual GActivationFunction* clone() { return new GActivationTanH(); }
@@ -197,10 +215,16 @@ public:
 	virtual const char* name() const { return "algebraic"; }
 
 	/// Returns x/(sqrt(x*x+1.0). The result is in the range -1 <= y <= 1
-	virtual double squash(double x, size_t index) { return x / (sqrt(x * x + 1.0)); }
+	virtual double squash(double x, size_t index = 0) { return x / (sqrt(x * x + 0.25)); }
 
 	/// Returns 1.0/(sqrt(x*x+1))-(x*x)/pow(x*x+1,1.5)
-	virtual double derivative(double x, size_t index) { return 1.0 / (sqrt(x * x + 1)) - (x * x) / pow(x * x + 1, 1.5); }
+	virtual double derivative(double x, size_t index)
+	{
+		x *= x;
+		return (1.0 - (x / (x + 0.25))) / sqrt(x + 0.25);
+	}
+
+	virtual double derivativeOfNet(double net, double activation, size_t index = 0) { return activation / (net * (net * net + 0.25)); }
 
 	/// Returns y / (sqrt(1.0 - (y * y)))
 	virtual double inverse(double y, size_t index) { return y / (sqrt(1.0 - (y * y))); }
@@ -220,7 +244,7 @@ public:
 	virtual const char* name() const { return "identity"; }
 
 	/// Returns x
-	virtual double squash(double x, size_t index) { return x; }
+	virtual double squash(double x, size_t index = 0) { return x; }
 
 	/// Returns 1.0
 	virtual double derivative(double x, size_t index) { return 1.0; }
@@ -229,7 +253,7 @@ public:
 	virtual double inverse(double y, size_t index) { return y; }
 
 	/// Returns 1.0
-	virtual double derivativeOfNet(double net, double activation, size_t index) { return 1.0; }
+	virtual double derivativeOfNet(double net, double activation, size_t index = 0) { return 1.0; }
 
 	/// See the comment for GActivationFunction::clone
 	virtual GActivationFunction* clone() { return new GActivationIdentity(); }
@@ -237,6 +261,7 @@ public:
 
 
 #define BEND_AMOUNT 0.5
+#define BEND_SIZE 0.5
 
 /// This provides an alternative to using GActivationIdentity on the output layer
 /// for regression problems. It may add more power because it is non-linear, but
@@ -250,21 +275,22 @@ public:
 	virtual const char* name() const { return "bend"; }
 
 	/// Returns the bend function of x
-	virtual double squash(double x, size_t index)
+	virtual double squash(double x, size_t index = 0)
 	{
-		return BEND_AMOUNT * (sqrt(x * x + 1) - 1) + x;
+		return BEND_AMOUNT * (sqrt(x * x + BEND_SIZE * BEND_SIZE) - BEND_SIZE) + x;
 	}
 
 	/// Returns the derivative of the bend function
 	virtual double derivative(double x, size_t index)
 	{
-		return BEND_AMOUNT * x / sqrt(x * x + 1) + 1;
+		return BEND_AMOUNT * x / sqrt(x * x + BEND_SIZE * BEND_SIZE) + 1.0;
 	}
 
 	/// Returns the inverse of the bend function
 	virtual double inverse(double y, size_t index)
 	{
-		return (BEND_AMOUNT * sqrt(y * y + 2.0 * BEND_AMOUNT * y + 1) - y - BEND_AMOUNT) / (BEND_AMOUNT * BEND_AMOUNT - 1);
+		//return (BEND_AMOUNT * sqrt(y * y + 2.0 * BEND_AMOUNT * y + 1.0) - y - BEND_AMOUNT) / (BEND_AMOUNT * BEND_AMOUNT - 1);
+		return BEND_SIZE * (BEND_AMOUNT * sqrt(y * y / (BEND_SIZE * BEND_SIZE) + 2.0 * BEND_AMOUNT / BEND_SIZE * y + 1.0) - y / BEND_SIZE - BEND_AMOUNT) / (BEND_AMOUNT * BEND_AMOUNT - 1.0);
 	}
 
 	/// See the comment for GActivationFunction::clone
@@ -277,7 +303,9 @@ class GActivationHinge : public GActivationFunction
 {
 protected:
 	size_t m_units;
+	GVec m_error;
 	GVec m_hinges;
+	GVec m_delta;
 
 public:
 	/// General-purpose constructor
@@ -286,11 +314,16 @@ public:
 	/// Unmarshaling constructor
 	GActivationHinge(GDomNode* pNode);
 
+#ifndef MIN_PREDICT
+	/// Performs unit testing. Throws an exception if any test fails.
+	static void test();
+#endif
+
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "hinge"; }
 
 	/// Returns the internal vector of hinge values
-	double* alphas() { return m_hinges.v; }
+	GVec& alphas() { return m_hinges; }
 
 	/// Marshals this object to a JSON DOM.
 	virtual GDomNode* serialize(GDom* pDoc) const;
@@ -298,33 +331,51 @@ public:
 	/// Returns the bend function of x
 	virtual double squash(double x, size_t index)
 	{
-		return m_hinges.v[index] * (sqrt(x * x + 1) - 1) + x;
+		return m_hinges[index] * (sqrt(x * x + BEND_SIZE * BEND_SIZE) - BEND_SIZE) + x;
 	}
 
 	/// Returns the derivative of the bend function
 	virtual double derivative(double x, size_t index)
 	{
-		return m_hinges.v[index] * x / sqrt(x * x + 1) + 1;
+		return m_hinges[index] * x / sqrt(x * x + BEND_SIZE * BEND_SIZE) + 1.0;
 	}
 
 	/// Returns the inverse of the bend function
 	virtual double inverse(double y, size_t index)
 	{
-		double v = m_hinges.v[index];
-		return (v * sqrt(y * y + 2.0 * v * y + 1) - y - v) / (v * v - 1);
+		double v = m_hinges[index];
+		return BEND_SIZE * (v * sqrt(y * y / (BEND_SIZE * BEND_SIZE) + 2.0 * v / BEND_SIZE * y + 1.0) - y / BEND_SIZE - v) / (v * v - 1.0);
 	}
 
 	/// Resizes the layer
 	virtual void resize(size_t units);
 
-	/// Refines the hinge values by stochastic gradient descent
-	virtual void refine(const double* pNet, const double* pActivation, const double* pError, double learningRate);
+	/// Sets the error term for this activation function. Used in stochastic gradient descent. (The default behavior is nothing because most activation functions have no parameters to refine.)
+	virtual void setError(const GVec& error);
+
+	/// Computes the deltas necessary to refine the parameters of this activation function by gradient descent
+	virtual void updateDeltas(const GVec& net, const GVec& activation, double momentum);
+
+	/// Applies the deltas to refine the parameters of this activation function by gradient descent
+	virtual void applyDeltas(double learningRate);
 
 	/// Regularizes the parameters of this activation function
 	virtual void regularize(double lambda);
 
 	/// See the comment for GActivationFunction::clone
 	virtual GActivationFunction* clone();
+
+	/// Returns the number of weights in this activation function.
+	virtual size_t countWeights();
+
+	/// Serialize the weights in this activation function.
+	virtual size_t weightsToVector(double* pOutVector);
+
+	/// Serialize the weights in this activation function.
+	virtual size_t vectorToWeights(const double* pVector);
+
+	/// Copies the weights from another instance.
+	virtual void copyWeights(const GActivationFunction* pOther);
 };
 
 
@@ -334,7 +385,9 @@ class GActivationLogExp : public GActivationFunction
 {
 protected:
 	size_t m_units;
+	GVec m_error;
 	GVec m_alphas;
+	GVec m_delta;
 
 public:
 	/// General-purpose constructor
@@ -343,11 +396,16 @@ public:
 	/// Unmarshaling constructor
 	GActivationLogExp(GDomNode* pNode);
 
+#ifndef MIN_PREDICT
+	/// Performs unit testing. Throws an exception if any test fails.
+	static void test();
+#endif
+
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "logexp"; }
 
 	/// Returns the internal vector of parameter values
-	double* alphas() { return m_alphas.v; }
+	GVec& alphas() { return m_alphas; }
 
 	/// Marshals this object to a JSON DOM.
 	virtual GDomNode* serialize(GDom* pDoc) const;
@@ -355,53 +413,59 @@ public:
 	/// Returns the logexp function of x with the parameterized alpha value
 	virtual double squash(double x, size_t index)
 	{
-		return GMath::logExp(m_alphas.v[index], x);
+		return std::max(-500.0, std::min(500.0, GMath::logExp(m_alphas[index], x)));
 	}
 
-	virtual double derivativeOfNet(double net, double activation, size_t index)
-	{
-		return 1.0;
-/*
-		double a = m_alphas.v[index];
-		if(a >= 0)
-			return tanh(std::max(-30.0, std::min(30.0, a * exp(a * net) - a + 1.0)));
-		else
-			return tanh(std::max(-30.0, std::min(30.0, 1.0 / (a * exp(std::min(300.0, a * activation)) - a + 1.0))));
-*/
-
-	}
-
-	/// Returns the derivative of the bend function
+	/// Returns the derivative of the logexp function
 	virtual double derivative(double x, size_t index)
 	{
-		double a = m_alphas.v[index];
-		if(a >= 0)
-			return a * exp(a * x) - a + 1.0;
+		double a = m_alphas[index];
+		double d;
+		if(a < -1e-12)
+			d = 1.0 / std::max(0.0033, 1.0 - a * (a + x)); // maxes out at about 300
+		else if(a > 1e-12)
+			d = exp(std::min(5.8/*300.0*/, a * x)); // maxes out at about 300
 		else
-		{
-			double t = GMath::logExp(a, x);
-			return 1.0 / (a * exp(a * t) - a + 1.0);
-		}
+			d = 1.0;
+		return d;//tanh(d);
 	}
 
 	/// Returns the inverse of the bend function
 	virtual double inverse(double y, size_t index)
 	{
-		double a = m_alphas.v[index];
+		double a = m_alphas[index];
 		return GMath::logExp(-a, y);
 	}
 
 	/// Resizes the layer
 	virtual void resize(size_t units);
 
-	/// Refines the hinge values by stochastic gradient descent
-	virtual void refine(const double* pNet, const double* pActivation, const double* pError, double learningRate);
+	/// Sets the error term for this activation function. Used in stochastic gradient descent. (The default behavior is nothing because most activation functions have no parameters to refine.)
+	virtual void setError(const GVec& error);
+
+	/// Computes the deltas necessary to refine the parameters of this activation function by gradient descent
+	virtual void updateDeltas(const GVec& net, const GVec& activation, double momentum);
+
+	/// Applies the deltas to refine the parameters of this activation function by gradient descent
+	virtual void applyDeltas(double learningRate);
 
 	/// Regularizes the parameters of this activation function
 	virtual void regularize(double lambda);
 
 	/// See the comment for GActivationFunction::clone
 	virtual GActivationFunction* clone();
+
+	/// Returns the number of weights in this activation function.
+	virtual size_t countWeights();
+
+	/// Serialize the weights in this activation function.
+	virtual size_t weightsToVector(double* pOutVector);
+
+	/// Serialize the weights in this activation function.
+	virtual size_t vectorToWeights(const double* pVector);
+
+	/// Copies the weights from another instance.
+	virtual void copyWeights(const GActivationFunction* pOther);
 };
 
 
@@ -418,7 +482,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "bidir"; }
 
-	virtual double squash(double x, size_t index)
+	virtual double squash(double x, size_t index = 0)
 	{
 		double d = sqrt(x * x + 1.0);
 		return sqrt(d + x) - sqrt(d - x);
@@ -453,7 +517,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "gaussian"; }
 
-	virtual double squash(double x, size_t index) { return exp(-(x * x)); }
+	virtual double squash(double x, size_t index = 0) { return exp(-(x * x)); }
 
 	virtual double derivative(double x, size_t index) { return -2.0 * x * exp(-(x * x)); }
 
@@ -476,7 +540,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "sin"; }
 
-	virtual double squash(double x, size_t index) { return sin(x); }
+	virtual double squash(double x, size_t index = 0) { return sin(x); }
 
 	virtual double derivative(double x, size_t index) { return cos(x); }
 
@@ -495,7 +559,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "sinc"; }
 
-	virtual double squash(double x, size_t index) { return x == 0 ? 1.0 : sin(x) / x; }
+	virtual double squash(double x, size_t index = 0) { return x == 0 ? 1.0 : sin(x) / x; }
 
 	virtual double derivative(double x, size_t index) { return x == 0 ? 0.0 : cos(x) / x - sin(x) / (x * x); }
 
@@ -518,7 +582,7 @@ public:
 	virtual const char* name() const { return "logisticderiv"; }
 
 	/// The derivative of the logistic function.
-	virtual double squash(double x, size_t index)
+	virtual double squash(double x, size_t index = 0)
 	{
 		if(x >= 700.0) // Don't trigger a floating point exception
 			return 0.0;
@@ -538,7 +602,7 @@ public:
 	}
 
 	/// Returns y*(1.0-y)
-	virtual double derivativeOfNet(double net, double activation, size_t index)
+	virtual double derivativeOfNet(double net, double activation, size_t index = 0)
 	{
 		double t = 1.0 - 2.0 / (exp(-net) + 1.0);
 		return activation * t;
@@ -556,7 +620,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "relu"; }
 
-	virtual double squash(double x, size_t index) { return std::max(0.0, x); }
+	virtual double squash(double x, size_t index = 0) { return std::max(0.0, x); }
 
 	virtual double derivative(double x, size_t index) { return (x >= 0.0 ? 1.0 : 0.0); }
 
@@ -574,7 +638,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "softplus"; }
 
-	virtual double squash(double x, size_t index) { return x > 500 ? x : log(1.0 + exp(x)); }
+	virtual double squash(double x, size_t index = 0) { return x > 500 ? x : log(1.0 + exp(x)); }
 
 	virtual double derivative(double x, size_t index) { return 1.0 / (1.0 + exp(-x)); }
 
@@ -592,7 +656,7 @@ public:
 	/// Returns the name of this activation function
 	virtual const char* name() const { return "softplus2"; }
 
-	virtual double squash(double x, size_t index) { return 0.5 * (sqrt(x * x + 1) + x); }
+	virtual double squash(double x, size_t index = 0) { return 0.5 * (sqrt(x * x + 1) + x); }
 
 	virtual double derivative(double x, size_t index) { return 0.5 * (x / sqrt(x * x + 1) + 1.0); }
 

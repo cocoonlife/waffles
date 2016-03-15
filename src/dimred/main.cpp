@@ -47,6 +47,7 @@
 #include <iostream>
 #include <string>
 #include <set>
+#include <memory>
 #include <map>
 #include <algorithm>
 #ifdef WIN32
@@ -63,6 +64,7 @@ using std::vector;
 using std::string;
 using std::set;
 using std::map;
+using std::shared_ptr;
 
 size_t getAttrVal(const char* szString, size_t attrCount)
 {
@@ -224,7 +226,7 @@ void loadDataWithSwitches(GMatrix& data, GArgReader& args, size_t& pLabelDims,
 	std::sort(ignore.begin(), ignore.end());
 	for(size_t i = ignore.size() - 1; i < ignore.size(); i--)
 	{
-		data.deleteColumn(ignore[i]);
+		data.deleteColumns(ignore[i], 1);
 		originalIndices.erase(originalIndices.begin()+ignore[i]);
 		for(size_t j = 0; j < labels.size(); j++)
 		{
@@ -356,14 +358,6 @@ GNeighborFinder* instantiateNeighborFinder(GMatrix* pData, GRand* pRand, GArgRea
 		{
 			int neighbors = args.pop_uint();
 			pNF = new GKdTree(pData, neighbors, NULL, true);
-		}
-		else if(_stricmp(alg, "saffron") == 0)
-		{
-			size_t medianCands = args.pop_uint();
-			size_t neighbors = args.pop_uint();
-			size_t tangentSpaceDims = args.pop_uint();
-			double thresh = args.pop_double();
-			pNF = new GSaffron(pData, medianCands, neighbors, tangentSpaceDims, thresh, pRand);
 		}
 		else if(_stricmp(alg, "temporal") == 0)
 		{
@@ -871,7 +865,7 @@ void neuroPCA(GArgReader& args)
 		GAssert(pWeights->cols() == pData->cols());
 		for(int i = 0; i < nTargetDims; i++)
 		{
-			double scal = sqrt(GVec::squaredMagnitude(pWeights->row(i + 1), pWeights->cols()));
+			double scal = sqrt(pWeights->row(i + 1).squaredMagnitude());
 			for(size_t j = 0; j < pDataAfter->rows(); j++)
 				pDataAfter->row(j)[i] *= scal;
 		}
@@ -921,8 +915,7 @@ void principalComponentAnalysis(GArgReader& args)
 	{
 		GDom doc;
 		doc.loadJson(modelIn.c_str());
-		GLearnerLoader ll;
-		pTransform = new GPCA(doc.root(), ll);
+		pTransform = new GPCA(doc.root());
 	}
 	else
 	{
@@ -946,7 +939,7 @@ void principalComponentAnalysis(GArgReader& args)
 		pRelation->addAttribute("eigenvalues", 0, NULL);
 		GMatrix dataEigenvalues(pRelation);
 		dataEigenvalues.newRows(nTargetDims);
-		double* pEigVals = pTransform->eigVals();
+		GVec& pEigVals = pTransform->eigVals();
 		for(int i = 0; i < nTargetDims; i++)
 			dataEigenvalues[i][0] = pEigVals[i];
 		dataEigenvalues.saveArff(eigenvalues.c_str());
@@ -1075,7 +1068,7 @@ void selfOrganizingMap(GArgReader& args){
       if(args.if_pop("showTrain") || args.if_pop("showtrain")){
 	showTrain = true;
       }
-      smart_ptr<Reporter> weightReporter
+      shared_ptr<Reporter> weightReporter
 	(new SVG2DWeightReporter(baseFilename, xDim, yDim, showTrain));
       Holder<IterationIntervalReporter> intervalReporter
 	(new IterationIntervalReporter(weightReporter, interval));
@@ -1195,11 +1188,12 @@ void singularValueDecomposition(GArgReader& args)
 	}
 	else
 	{
-		GVec::print(cout, 14, pDiag, std::min(pU->rows(), pV->rows()));
+		GVecWrapper diag(pDiag, std::min(pU->rows(), pV->rows()));
+		diag.vec().print(cout);
 		cout << "\n";
 	}
 }
-
+/*
 void unsupervisedBackProp(GArgReader& args)
 {
 	// Load the file and params
@@ -1234,8 +1228,7 @@ void unsupervisedBackProp(GArgReader& args)
 		{
 			GDom doc;
 			doc.loadJson(args.pop_string());
-			GLearnerLoader ll;
-			pUBP = new GUnsupervisedBackProp(doc.root(), ll);
+			pUBP = new GUnsupervisedBackProp(doc.root());
 			hUBP.reset(pUBP);
 		}
 		else if(args.if_pop("-modelout"))
@@ -1288,6 +1281,7 @@ void unsupervisedBackProp(GArgReader& args)
 	if(sProgress.length() > 0)
 		pUBP->progress().saveArff(sProgress.c_str());
 }
+*/
 /*
 void autoencoder(GArgReader& args)
 {
@@ -1449,7 +1443,7 @@ int main(int argc, char *argv[])
 		else if(args.if_pop("scalingunfolder")) scalingUnfolder(args);
 		else if(args.if_pop("svd")) singularValueDecomposition(args);
 		else if(args.if_pop("som")) selfOrganizingMap(args);
-		else if(args.if_pop("unsupervisedbackprop")) unsupervisedBackProp(args);
+//		else if(args.if_pop("unsupervisedbackprop")) unsupervisedBackProp(args);
 //		else if(args.if_pop("autoencoder")) autoencoder(args);
 		else throw Ex("Unrecognized command: ", args.peek());
 	}

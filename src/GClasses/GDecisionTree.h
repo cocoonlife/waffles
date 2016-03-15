@@ -58,7 +58,7 @@ public:
 	GDecisionTree();
 
 	/// Loads from a DOM.
-	GDecisionTree(GDomNode* pNode, GLearnerLoader& ll);
+	GDecisionTree(const GDomNode* pNode);
 
 	virtual ~GDecisionTree();
 
@@ -118,17 +118,17 @@ public:
 	void autoTune(GMatrix& features, GMatrix& labels);
 
 	/// See the comment for GSupervisedLearner::predict
-	virtual void predict(const double* pIn, double* pOut);
+	virtual void predict(const GVec& pIn, GVec& pOut);
 
 	/// See the comment for GSupervisedLearner::predictDistribution
-	virtual void predictDistribution(const double* pIn, GPrediction* pOut);
+	virtual void predictDistribution(const GVec& pIn, GPrediction* pOut);
 
 protected:
 	/// See the comment for GSupervisedLearner::trainInner
 	virtual void trainInner(const GMatrix& features, const GMatrix& labels);
 
 	/// Finds the leaf node that corresponds with the specified feature vector
-	GDecisionTreeLeafNode* findLeaf(const double* pIn, size_t* pDepth);
+	GDecisionTreeLeafNode* findLeaf(const GVec& pIn, size_t* pDepth);
 
 	/// A recursive helper method used to construct the decision tree
 	GDecisionTreeNode* buildBranch(GMatrix& features, GMatrix& labels, std::vector<size_t>& attrPool, size_t nDepth, size_t tolerance);
@@ -171,7 +171,7 @@ public:
 	GMeanMarginsTree();
 
 	/// Load from a DOM.
-	GMeanMarginsTree(GDomNode* pNode, GLearnerLoader& ll);
+	GMeanMarginsTree(const GDomNode* pNode);
 
 	virtual ~GMeanMarginsTree();
 
@@ -183,10 +183,10 @@ public:
 	virtual GDomNode* serialize(GDom* pDoc) const;
 
 	/// See the comment for GSupervisedLearner::predict
-	virtual void predict(const double* pIn, double* pOut);
+	virtual void predict(const GVec& pIn, GVec& pOut);
 
 	/// See the comment for GSupervisedLearner::predictDistribution
-	virtual void predictDistribution(const double* pIn, GPrediction* pOut);
+	virtual void predictDistribution(const GVec& pIn, GPrediction* pOut);
 
 	/// See the comment for GSupervisedLearner::clear
 	virtual void clear();
@@ -195,7 +195,7 @@ public:
 	void autoTune(GMatrix& features, GMatrix& labels);
 
 protected:
-	GMeanMarginsTreeNode* buildNode(GMatrix& features, GMatrix& labels, double* pBuf, size_t* pBuf2);
+	GMeanMarginsTreeNode* buildNode(GMatrix& features, GMatrix& labels, size_t* pBuf2);
 
 	/// See the comment for GSupervisedLearner::trainInner
 	virtual void trainInner(const GMatrix& features, const GMatrix& labels);
@@ -216,7 +216,7 @@ protected:
 
 public:
 	GRandomForest(size_t trees, size_t samples = 1);
-	GRandomForest(GDomNode* pNode, GLearnerLoader& ll);
+	GRandomForest(const GDomNode* pNode, GLearnerLoader& ll);
 	virtual ~GRandomForest();
 
 #ifndef NO_TEST_CODE
@@ -235,10 +235,10 @@ public:
 	void print(std::ostream& stream, GArffRelation* pFeatureRel = NULL, GArffRelation* pLabelRel = NULL);
 
 	/// See the comment for GSupervisedLearner::predict
-	virtual void predict(const double* pIn, double* pOut);
+	virtual void predict(const GVec& pIn, GVec& pOut);
 
 	/// See the comment for GSupervisedLearner::predictDistribution
-	virtual void predictDistribution(const double* pIn, GPrediction* pOut);
+	virtual void predictDistribution(const GVec& pIn, GPrediction* pOut);
 
 protected:
 	/// See the comment for GSupervisedLearner::trainInner

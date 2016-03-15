@@ -62,14 +62,15 @@ void plot_it(const char* filename, GNeuralNet& nn, GMatrix& trainFeat, GMatrix& 
 	double prevx = xmin;
 	double prevy = 0.0;
 	double step = (xmax - xmin) / 500.0;
-	for(double x = prevx; x < xmax; x += step)
+	GVec x(1);
+	GVec y(1);
+	for(x[0] = prevx; x[0] < xmax; x[0] += step)
 	{
-		double y;
-		nn.predict(&x, &y);
-		if(prevx != x)
-			svg.line(prevx, prevy, x, y, 0.3);
-		prevx = x;
-		prevy = y;
+		nn.predict(x, y);
+		if(prevx != x[0])
+			svg.line(prevx, prevy, x[0], y[0], 0.3);
+		prevx = x[0];
+		prevy = y[0];
 	}
 	for(size_t i = 0; i < trainLab.rows(); i++)
 		svg.dot(trainFeat[i][0], trainLab[i][0], 0.4, 0xff000080);
@@ -172,9 +173,9 @@ void doit()
 	double labMean = trainLab.columnMean(0);
 	double labDev = sqrt(trainLab.columnVariance(0, labMean));
 	cout << "dev=" << to_str(labDev) << "\n";
-	double rmse = sqrt(nn.sumSquaredError(trainFeat, trainLab) / trainLab.rows());
-	cout << "initial rmse/dev=" << to_str(rmse / labDev) << "\n";
-	if(rmse >= TIGHTNESS_GOOD * labDev)
+	double initial_rmse = sqrt(nn.sumSquaredError(trainFeat, trainLab) / trainLab.rows());
+	cout << "initial rmse/dev=" << to_str(initial_rmse / labDev) << "\n";
+	if(initial_rmse >= TIGHTNESS_GOOD * labDev)
 		throw Ex("Already above threshold on initialization. This probably means PERTURBATION is too high or SOFTPLUS_SHIFT is too low.");
 
 	// Open Firefox to view the progress

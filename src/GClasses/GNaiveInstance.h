@@ -56,7 +56,7 @@ public:
 	GNaiveInstance();
 
 	/// Deserializing constructor
-	GNaiveInstance(GDomNode* pNode, GLearnerLoader& ll);
+	GNaiveInstance(const GDomNode* pNode);
 	virtual ~GNaiveInstance();
 
 #ifndef NO_TEST_CODE
@@ -84,13 +84,13 @@ public:
 	void autoTune(GMatrix& features, GMatrix& labels);
 
 	/// See the comment for GSupervisedLearner::predict
-	virtual void predict(const double* pIn, double* pOut);
+	virtual void predict(const GVec& in, GVec& out);
 
 	/// See the comment for GSupervisedLearner::predictDistribution
-	virtual void predictDistribution(const double* pIn, GPrediction* pOut);
+	virtual void predictDistribution(const GVec& in, GPrediction* pOut);
 
 	/// Incrementally train with a single instance
-	virtual void trainIncremental(const double* pIn, const double* pOut);
+	virtual void trainIncremental(const GVec& in, const GVec& out);
 
 protected:
 	void evalInput(size_t nInputDim, double dInput);

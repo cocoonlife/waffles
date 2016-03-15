@@ -46,7 +46,6 @@
 #include "GOptimizer.h"
 #include "GRand.h"
 #include "GSparseMatrix.h"
-#include "GSystemLearner.h"
 #include "GTime.h"
 #include "GTransform.h"
 #include "GDom.h"
@@ -64,6 +63,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <memory>
 
 namespace GClasses{
 
@@ -84,7 +84,7 @@ public:
 
 	static void parseAttributeList(vector<size_t>& list, GArgReader& args, size_t attrCount);
 
-        static void loadData(GArgReader& args, Holder<GMatrix>& hFeaturesOut, Holder<GMatrix>& hLabelsOut, bool requireMetadata = false);
+        static void loadData(GArgReader& args, std::unique_ptr<GMatrix>& hFeaturesOut, std::unique_ptr<GMatrix>& hLabelsOut, bool requireMetadata = false);
 
         static GAgglomerativeTransducer* InstantiateAgglomerativeTransducer(GArgReader& args, GMatrix* pFeatures, GMatrix* pLabels);
 
@@ -228,7 +228,7 @@ public:
 
         static void sterilize(GArgReader& args);
 
-        static void trainRecurrent(GArgReader& args);
+//        static void trainRecurrent(GArgReader& args);
 
         static void regress(GArgReader& args);
 
@@ -238,7 +238,7 @@ public:
 
         static void showError(GArgReader& args, const char* szAppName, const char* szMessage);
 };
-
+/*
 class MyRecurrentModel : public GRecurrentModel
 {
 protected:
@@ -247,8 +247,8 @@ protected:
 	double m_dStart;
 
 public:
-	MyRecurrentModel(GSupervisedLearner* pTransition, GSupervisedLearner* pObservation, size_t actionDims, size_t contextDims, size_t obsDims, GRand* pRand, std::vector<size_t>* pParamDims, const char* stateFilename, double validateInterval)
-	: GRecurrentModel(pTransition, pObservation, actionDims, contextDims, obsDims, pRand, pParamDims), m_stateFilename(stateFilename), m_validateInterval(validateInterval)
+	MyRecurrentModel(GSupervisedLearner* pTransition, GSupervisedLearner* pObservation, size_t actionDims, size_t ctxtDims, size_t observationDims, GRand* pRand, std::vector<size_t>* pParamDims, const char* stateFilename, double validateInterval)
+	: GRecurrentModel(pTransition, pObservation, actionDims, ctxtDims, observationDims, pRand, pParamDims), m_stateFilename(stateFilename), m_validateInterval(validateInterval)
 	{
 		m_dStart = GTime::seconds();
 	}
@@ -277,7 +277,7 @@ public:
 		}
 	}
 };
-
+*/
 class OptimizerTargetFunc : public GTargetFunction
 {
 public:
@@ -312,12 +312,12 @@ public:
 			params[inDims + j] = pVector[j];
 		for(size_t i = 0; i < m_pIn->rows(); i++)
 		{
-			double* pIn = m_pIn->row(i);
+			GVec& pIn = m_pIn->row(i);
 			for(size_t j = 0; j < inDims; j++)
 				params[j] = pIn[j];
 			double pred = m_pFunc->call(params, *m_pParser);
-			double* pOut = m_pOut->row(i);
-			double d = *pOut - pred;
+			GVec& pOut = m_pOut->row(i);
+			double d = pOut[0] - pred;
 			sse += d * d;
 		}
 		return sse;

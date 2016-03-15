@@ -27,7 +27,7 @@ using namespace GClasses;
 using std::string;
 using std::vector;
 
-UsageNode::UsageNode(const char* templ, const char* descr)
+UsageNode::UsageNode(const char* templ, const char* descrip)
 {
 #ifdef DEBUG_HELPERS
 	p0 = NULL; p1 = NULL; p2 = NULL; p3 = NULL;
@@ -63,7 +63,7 @@ UsageNode::UsageNode(const char* templ, const char* descr)
 			templ += i;
 		}
 	}
-	m_description = descr;
+	m_description = descrip;
 #ifdef DEBUG_HELPERS
 	if(m_parts.size() > 0) p0 = m_parts[0].c_str();
 	if(m_parts.size() > 1) p1 = m_parts[1].c_str();
@@ -78,9 +78,9 @@ UsageNode::~UsageNode()
 		delete(*it);
 }
 
-UsageNode* UsageNode::add(const char* templ, const char* descr)
+UsageNode* UsageNode::add(const char* templ, const char* descrip)
 {
-	UsageNode* pNode = new UsageNode(templ, descr);
+	UsageNode* pNode = new UsageNode(templ, descrip);
 	m_choices.push_back(pNode);
 	return pNode;
 }
@@ -153,8 +153,8 @@ void UsageNode::print(std::ostream& stream, int depth, int tabSize, int maxWidth
 	// Print the children
 	if(depth < maxDepth)
 	{
-		for(vector<UsageNode*>::iterator it = m_choices.begin(); it != m_choices.end(); it++)
-			(*it)->print(stream, depth + 1, tabSize, maxWidth, maxDepth, descriptions);
+		for(vector<UsageNode*>::iterator it2 = m_choices.begin(); it2 != m_choices.end(); it2++)
+			(*it2)->print(stream, depth + 1, tabSize, maxWidth, maxDepth, descriptions);
 	}
 }
 
@@ -170,8 +170,9 @@ UsageNode* makeMasterUsageTree()
 	pRoot->choices().push_back(makeRecommendUsageTree());
 	pRoot->choices().push_back(makeSparseUsageTree());
 	pRoot->choices().push_back(makeTransformUsageTree());
+	pRoot->choices().push_back(makeTimeSeriesUsageTree());
 	return pRoot;
-};
+}
 
 
 
@@ -233,7 +234,7 @@ UsageNode* makeAlgorithmUsageTree()
 			"leaf node.  This means that there will be at most [n]-1 splits before a decision is made.  This crudely limits overfitting, and so can be helpful on small data sets.  It can also make the resulting trees easier to interpret.  If set to 0, then there is no maximum (which is the default).");
 	}
 	{
-		UsageNode* pGP = pRoot->add("gaussianprocess", "A Gaussian process model.");
+		UsageNode* pGP = pRoot->add("gaussianprocess <options>", "A Gaussian process model.");
 		UsageNode* pOpts = pGP->add("<options>");
 		pOpts->add("-noise [var]=1.0", "The variance of the noise parameter.");
 		pOpts->add("-prior [var]=1024.0", "The prior variance for the weights. (This value will be multiplied by an identity matrix to form the prior covariance for the weights.");
@@ -521,7 +522,6 @@ UsageNode* makeCollaborativeFilterUsageTree()
 		pOpts->add("-regularize [value]=0.01", "Specify a regularization value. Typically, this is a small value. Larger values will put more pressure on the system to use small values in the matrix factors.");
 		pOpts->add("-miniters [value]=1", "Specify a the minimum number of iterations to train the model before checking its validation error. This ensures that model does at least a certain amount of training before converging.");
 		pOpts->add("-decayrate [value]=0.97", "Specify a decay rate in the range of (0-1) for the learning rate parameter. Value closer to 1 will cause the rate the decay slower while rate closer to 0 cause the a faster decay.");
-		pOpts->add("-noinputbias", "Do not use an input bias.");
 		pOpts->add("-nonneg", "Constrain all non-bias weights to be non-negative");
 	}
 	{
@@ -845,6 +845,28 @@ UsageNode* makeGenerateUsageTree()
 		pOpts->add("-reduced", "Generate intrinsic values instead of extrinsic values. (This might be useful to empirically measure the accuracy of a manifold learner.)");
 	}
 	{
+		UsageNode* pManifold = pRoot->add("lorenz [count] <options>", "Generate count samples in the chaotic Lorenz ('63) series.");
+		pManifold->add("[count]=100", "The number of samples to generate.");
+		UsageNode* pOpts = pManifold->add("<options>");
+		pOpts->add("-x [value]=1.0", "Specify a value for x for t = 0.");
+		pOpts->add("-y [value]=1.0", "Specify a value for y for t = 0.");
+		pOpts->add("-z [value]=1.0", "Specify a value for z for t = 0.");
+		pOpts->add("-sigma [value]=10.0", "Specify a value for sigma.");
+		pOpts->add("-beta [value]=8.0/3.0", "Specify a value for beta.");
+		pOpts->add("-rho [value]=28.0", "Specify a value for rho.");
+		pOpts->add("-dt [value]=0.01", "Specify a value for timestep.");
+	}
+	{
+		UsageNode* pManifold = pRoot->add("mackeyglass [count] <options>", "Generate count samples in the chaotic Mackey-Glass series.");
+		pManifold->add("[count]=100", "The number of samples to generate.");
+		UsageNode* pOpts = pManifold->add("<options>");
+		pOpts->add("-initX [value]=0.5", "Specify a value for x for t <= 0.");
+		pOpts->add("-beta [value]=0.25", "Specify a value for beta.");
+		pOpts->add("-gamma [value]=0.1", "Specify a value for gamma.");
+		pOpts->add("-n [value]=10.0", "Specify a value for n.");
+		pOpts->add("-tao [value]=17", "Specify a value for tao.");
+	}
+	{
 		UsageNode* pManifold = pRoot->add("manifold [samples] <options> [equations]", "Generate sample points randomly distributed on the surface of a manifold.");
 		pManifold->add("[samples]=2000", "The number of points with which to sample the manifold");
 		UsageNode* pOpts = pManifold->add("<options>");
@@ -1121,7 +1143,7 @@ UsageNode* makeLearnUsageTree()
 					" columns 0, 2, 3, 4, and 5. \"*0\" refers to the last column. \"0-*1\" refers to all but the last column.");
 		pDO->add("-ignore [attr_list]=0", "Specify attributes to ignore. [attr_list] is a comma-separated list of zero-indexed columns. A hypen may be used to specify a range of columns.  A '*' preceding a value means to index from the right instead of the left. For example, \"0,2-5\" refers to columns 0, 2, 3, 4, and 5. \"*0\" refers to the last column. \"0-*1\" refers to all but the last column.");
 	}
-	{
+/*	{
 		UsageNode* pTR = pRoot->add("trainrecurrent <options> [method] [obs-data] [action-data] [context-dims] [algorithm] [algorithm]", "Train a recurrent model of a dynamical system with the specified training [method]. The training data is specified by [obs-data], which specifies the sequence of observations, and [action-data], which specifies the sequence of actions. "
 			"[context-dims] specifies the number of dimensions in the state-space of the system. The two algorithms specify the two functions of a model of a dynamical system. The first [algorithm] models the transition function. The second [algorithm] models the observation function.");
 		UsageNode* pOpts = pTR->add("<options>");
@@ -1140,7 +1162,7 @@ UsageNode* makeLearnUsageTree()
 		pMeth->add("evolutionary", "Train with evoluationary optimization");
 		pMeth->add("hillclimber", "Train with a hill-climbing algorithm.");
 		pMeth->add("annealing [deviation] [decay] [window]", "Train with simulated annealing. Good values might be 2.0 0.5 300");
-	}
+	}*/
 	{
 		UsageNode* pOpt = pRoot->add("regress [data] <data_opts> [equation]", "Use a hill climbing algorithm to optimize the parameters of [equation] to fit to the [data]. If [data] has d feature dimensions, then [equation] must have more than d parameters. The equation must be named f. The first d arguments to f are supplied by the data features. The remaining arguments are optimized by the hill climber. The data must have exactly 1 label dimension, which the equation will attempt to predict. The sum-squared error and parameter values are printed to stdout.");
 		pOpt->add("[dataset]=data.arff", "The filename of a dataset.");
@@ -1182,16 +1204,6 @@ UsageNode* makeNeighborUsageTree()
 		UsageNode* pCC = pOpts->add("-cyclecut [thresh]", "Use CycleCut to break shortcuts and cycles.");
 		pCC->add("[thresh]=10", "The threshold cycle-length for bad cycles.");
 		pKD->add("[k]=12", "The number of neighbors.");
-	}
-	{
-		UsageNode* pMan = pRoot->add("saffron <options> [cands] [k] [t] [thresh]", "The SAFFRON intelligent neighbor-finding algorithm that finds neighborhoods with aligned tangent hyperplanes. This algorithm was published in Gashler, Michael S. and Martinez, Tony. Tangent space guided intelligent neighbor finding. In Proceedings of the IEEE International Joint Conference on Neural Networks IJCNN’11, pages 2617–2624, IEEE Press, 2011.");
-		UsageNode* pOpts = pMan->add("<options>");
-		UsageNode* pCC = pOpts->add("-cyclecut [thresh]", "Use CycleCut to break shortcuts and cycles.");
-		pCC->add("[thresh]=10", "The threshold cycle-length for bad cycles.");
-		pMan->add("[cands]=32", "The median number of neighbors to use as candidates.");
-		pMan->add("[k]=8", "The number of neighbors to find for each point.");
-		pMan->add("[t]=2", "The number of dimensions in the tangent hyperplanes.");
-		pMan->add("[thresh]=0.9", "A threshold above which all sqared-correlation values are considered to be equal.");
 	}
 	{
 		UsageNode* pSys = pRoot->add("temporal <options> [action-data] [k]", "A neighbor-finder designed for use in modeling certain types of dynamical systems. It estimates the number of time-steps between observations. This algorithm was published in Gashler, Michael S. and Martinez, Tony. Temporal nonlinear dimensionality reduction. In Proceedings of the IEEE International Joint Conference on Neural Networks IJCNN’11, pages 1959–1966, IEEE Press, 2011.");
@@ -1239,6 +1251,7 @@ UsageNode* makePlotUsageTree()
 		pOpts->add("-range [xmin] [ymin] [xmax] [ymax]", "Set the range. (The default is: -10 -5 10 5.)");
 		pOpts->add("-nohmarks", "Do not draw any vertical lines to mark position on the horizontal axis.");
 		pOpts->add("-novmarks", "Do not draw any horizontal lines to mark position on the vertical axis.");
+		pOpts->add("-notext", "Do not draw any text labels.");
 		pOpts->add("-nogrid", "Do not draw any horizontal or vertical grid lines.");
 		pOpts->add("-noserifs", "Use a font with no serifs. (This generally makes charts look a little cleaner.)");
 		pOpts->add("-aspect", "Adjust the range to preserve the aspect ratio. In other words, make sure that both axes visually have the same scale.");
@@ -1541,6 +1554,13 @@ UsageNode* makeTransformUsageTree()
 		UsageNode* pOpts = pAIC->add("<options>");
 		pOpts->add("-start [value]=0.0", "Specify the initial index. (the default is 0.0).");
 		pOpts->add("-increment [value]=1.0", "Specify the increment amount. (the default is 1.0).");
+		pOpts->add("-name [value]=index", "Specify the name of the new attribute.");
+	}
+	{
+		UsageNode* pACC = pRoot->add("addcategorycolumn [dataset] [name] [value]", "Add a column with a constant categorical value. This column will be inserted as column 0.");
+		pACC->add("[dataset]=data.arff", "The filename of a dataset.");
+		pACC->add("[name]=class", "The name of the new column or attribute.");
+		pACC->add("[value]=a", "The name of the constant value to insert in every row.");
 	}
 	{
 		UsageNode* pAN = pRoot->add("addnoise [dataset] [dev] <options>", "Add Gaussian noise with the specified deviation to all the elements in the dataset. (Assumes that the values are all continuous.)");
@@ -1571,6 +1591,7 @@ UsageNode* makeTransformUsageTree()
 		UsageNode* pOpts = pCorr->add("<options>");
 		pOpts->add("-aboutorigin", "Compute the correlation about the origin. (The default is to compute it about the mean.)");
 	}
+	pRoot->add("covariance [dataset]=in.arff", "Compute the covariance matrix of the specified matrix.");
 	{
 		UsageNode* pNode = pRoot->add("colstats [dataset]", "Generates a 4-row table. Row 0 contains the min value of each column in [dataset]. Row 1 contains the max value of each column in [dataset]. Row 2 contains the mean value of each column in [dataset]. Row 3 contains the median value of each column in [dataset].");
 		pNode->add("[dataset]=data.arff", "The filename of a dataset.");
@@ -1649,6 +1670,7 @@ UsageNode* makeTransformUsageTree()
 		pGD->add("[max]=1.0", "The maximum acceptable value");
 		UsageNode* pOpts = pGD->add("<options>");
 		pOpts->add("-invert", "Drop the row if the value falls within the range instead of dropping it if the value does not fall within the range.");
+		pOpts->add("-preserveOrder", "Preserve the order of the input matrix. By default, the delete operation does not guarantee the order will be preserved.");
 	}
 	{
 		UsageNode* pGD = pRoot->add("function [dataset] [equations]", "Compute new data as a function of some existing data. Each row in the output is computed from the corresponding row of the input dataset. Each equation, f1, f2, f3, ... will produce one column in the output data.");
@@ -1765,11 +1787,21 @@ UsageNode* makeTransformUsageTree()
 		pRotate->add("[angle_degrees]=90.0","The angle in degrees to rotate around the origin in the col_x,col_y plane.");
 	}
 	{
-		UsageNode* pSampRows = pRoot->add("samplerows [dataset] [portion]", "Samples from the rows in the specified dataset and prints them to stdout. This tool reads each row one-at-a-time, so it is well-suited for reducing the size of datasets that are too big to fit into memory. (Note that unlike most other tools, this one does not convert CSV to ARFF format internally. If the input is CSV, the output will be CSV too.)");
+		UsageNode* pRO = pRoot->add("reordercolumns [dataset] [column-list]", "Reorder the columns as specified in the column list.");
+		pRO->add("[dataset]=in.arff", "The filename of a dataset.");
+		pRO->add("[column-list]=0", "A comma-separated list of zero-indexed columns. A hypen may be used to specify a range of columns.  A '*' preceding a value means to index from the right instead of the left. For example, \"0,2-5\" refers to columns 0, 2, 3, 4, and 5. \"*0\" refers to the last column. \"0-*1\" refers to all but the last column.");
+	}
+	{
+		UsageNode* pSampRows = pRoot->add("samplerows [dataset] [portion]", "Randomly samples from the rows in the specified dataset and prints them to stdout. This tool reads each row one-at-a-time, so it is well-suited for reducing the size of datasets that are too big to fit into memory. (Note that unlike most other tools, this one does not convert CSV to ARFF format internally. If the input is CSV, the output will be CSV too.)");
 		pSampRows->add("[dataset]=in.arff", "The filename of a dataset. ARFF, CSV, and a few other formats are supported.");
 		pSampRows->add("[portion]=0.1", "A value between 0 and 1 that specifies the likelihood that each row will be printed to stdout.");
 		UsageNode* pOpts = pSampRows->add("<options>");
 		pOpts->add("-seed [value]=0", "Specify a seed for the random number generator.");
+	}
+	{
+		UsageNode* pSampRows = pRoot->add("samplerowsregularly [dataset] [freq]", "Samples from the rows in the specified dataset at regular intervals and prints them to stdout. This tool reads each row one-at-a-time, so it is well-suited for reducing the size of datasets that are too big to fit into memory. (Note that unlike most other tools, this one does not convert CSV to ARFF format internally. If the input is CSV, the output will be CSV too.)");
+		pSampRows->add("[dataset]=in.arff", "The filename of a dataset. ARFF, CSV, and a few other formats are supported.");
+		pSampRows->add("[freq]=10", "The number of rows read for each row printed.");
 	}
 	{
 		UsageNode* pScaleCols = pRoot->add("scalecolumns [dataset] [column-list] [scalar]", "Multiply the values in the specified columns by a scalar.");
@@ -1869,6 +1901,45 @@ UsageNode* makeTransformUsageTree()
 	}
 	{
 		pRoot->add("usage", "Print usage information.");
+	}
+	return pRoot;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+UsageNode* makeTimeSeriesUsageTree()
+{
+	UsageNode* pRoot = new UsageNode("waffles_ts [command]", "Analyze and extrapolate time-series data.");
+	{
+		UsageNode *pAdd = pRoot->add("train [dataset] <options>", "Trains an instance of Neural Decomposition on a time-series dataset.");
+		pAdd->add("[dataset]=time-series.arff", "The filename of the dataset.");
+		UsageNode *pOpts = pAdd->add("<options>");
+		pOpts->add("-regularization [value]=0.01", "Specify the L1 regularization amount.");
+		pOpts->add("-learningRate [value]=0.001", "Specify the learning rate.");
+		pOpts->add("-linearUnits [value]=10", "Specify the number of linear units to use to augment sinusoid units.");
+		pOpts->add("-softplusUnits [value]=10", "Specify the number of softplus units to use to augment sinusoid units.");
+		pOpts->add("-sigmoidUnits [value]=10", "Specify the number of sigmoid units to use to augment sinusoid units.");
+		pOpts->add("-epochs [value]=1000", "Specify the number of epochs to train the model.");
+		pOpts->add("-filterLogarithm", "Use a logarithmic pre- and post-processing step.");
+		pOpts->add("-features [dataset]", "Specify a features matrix instead of generating one automatically. Must be a single-column matrix in arff format.");
+	}
+	{
+		UsageNode *pPredict = pRoot->add("extrapolate [model-file] <options>", "Use a trained model to extrapolate time-series data.");
+		UsageNode *pOpts = pPredict->add("<options>");
+		pOpts->add("-start [value]=1.0", "Specify where to begin extrapolation. 0 represents the beginning of the training data, 1 represents the beginning of the testing data.");
+		pOpts->add("-length [value]=1.0", "Specify how far into the future to extrapolate. 1 represents the length of the training data.");
+		pOpts->add("-step [value]=0.0002", "Specify how tight to make predictions.");
+		pOpts->add("-outputFeatures", "Include a features column in the output matrix.");
+		pOpts->add("-features [dataset]", "Specify a features matrix instead of generating one automatically. Must be a single-column matrix in arff format. If this is set, then the start, length, step, and outputFeatures flags will be ignored.");
 	}
 	return pRoot;
 }
