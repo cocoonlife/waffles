@@ -1,3 +1,10 @@
+waffles (0.0-5) trusty; urgency=medium
+
+  * Upgrade waffles.
+  * Mandate support for C++11.
+
+ -- Charlie Turner <charlie.turner@cocoon.life>  Tue, 15 Mar 2016 12:03:42 +0000
+
 waffles (0.0-4) trusty; urgency=medium
 
   * Move include files into subdirectory
