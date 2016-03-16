@@ -234,7 +234,7 @@ std::unique_ptr<GMatrix> GTransducer::transduce(const GMatrix& features1, const 
 			disc.train(labels1);
 			GMatrix* pL1 = disc.transformBatch(labels1);
 			auto pL2 = transduceInner(*pF1, *pL1, *pF2);
-			return std::unique_ptr<GMatrix>(disc.untransformBatch(*pL2));
+			return disc.untransformBatch(*pL2);
 		}
 	}
 	else
@@ -251,7 +251,7 @@ std::unique_ptr<GMatrix> GTransducer::transduce(const GMatrix& features1, const 
 				GMatrix* pL1 = norm.transformBatch(labels1);
 				std::unique_ptr<GMatrix> hL1(pL1);
 				auto pL2 = transduceInner(*pF1, *pL1, *pF2);
-				return std::unique_ptr<GMatrix>(norm.untransformBatch(*pL2));
+				return norm.untransformBatch(*pL2);
 			}
 		}
 		else
@@ -264,7 +264,7 @@ std::unique_ptr<GMatrix> GTransducer::transduce(const GMatrix& features1, const 
 				GMatrix* pL1 = ntc.transformBatch(labels1);
 				std::unique_ptr<GMatrix> hL1(pL1);
 				auto pL2 = transduceInner(*pF1, *pL1, *pF2);
-				return std::unique_ptr<GMatrix>(ntc.untransformBatch(*pL2));
+				return ntc.untransformBatch(*pL2);
 			}
 			else
 			{
