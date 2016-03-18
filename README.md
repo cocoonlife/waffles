@@ -31,5 +31,3 @@ will result in Debian packages getting build in ..
 
     cd waffles/src
     ./test/waffles_test
-
-# Packaging
